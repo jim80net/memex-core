@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.2.2](https://github.com/jim80net/memex-core/compare/memex-core-v0.2.1...memex-core-v0.2.2) (2026-03-15)
+
+
+### Bug Fixes
+
+* add repository URL for npm provenance verification ([616e325](https://github.com/jim80net/memex-core/commit/616e325aabfa01ea42647e59fad794da20a7efa9))
+* add repository URL for npm provenance verification ([1c3f728](https://github.com/jim80net/memex-core/commit/1c3f728a8116fdd67894bbab48730fd664bf870b))
+
 ## [0.2.1](https://github.com/jim80net/memex-core/compare/memex-core-v0.2.0...memex-core-v0.2.1) (2026-03-15)
 
 

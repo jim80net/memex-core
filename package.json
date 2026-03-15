@@ -1,6 +1,6 @@
 {
   "name": "@jim80net/memex-core",
-  "version": "0.2.1",
+  "version": "0.2.2",
   "description": "Shared core engine for memex skill routers — embeddings, indexing, caching, telemetry",
   "license": "MIT",
   "repository": {
