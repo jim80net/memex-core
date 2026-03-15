@@ -1,8 +1,8 @@
-import { describe, it, expect, beforeEach, afterEach } from "vitest";
-import { mkdir, writeFile, readFile, rm } from "node:fs/promises";
-import { join } from "node:path";
+import { mkdir, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { loadCache, saveCache, toCachedSkill, fromCachedSkill } from "../src/cache.ts";
+import { join } from "node:path";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { fromCachedSkill, loadCache, saveCache, toCachedSkill } from "../src/cache.ts";
 import type { CacheData, IndexedSkill } from "../src/types.ts";
 
 describe("cache", () => {
@@ -28,7 +28,10 @@ describe("cache", () => {
           name: "test-skill",
           description: "A test skill",
           queries: ["how to test", "run tests"],
-          embeddings: [[0.1, 0.2, 0.3], [0.4, 0.5, 0.6]],
+          embeddings: [
+            [0.1, 0.2, 0.3],
+            [0.4, 0.5, 0.6],
+          ],
           mtime: 1234567890,
           type: "skill",
         },

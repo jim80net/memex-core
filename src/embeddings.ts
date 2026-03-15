@@ -101,7 +101,8 @@ export class LocalEmbeddingProvider implements EmbeddingProvider {
     const { fileURLToPath } = await import("node:url");
     // Dynamic import for createRequire — types may not expose it on the namespace
     const moduleMod = await import("node:module");
-    const createRequire = (moduleMod as any).createRequire || (moduleMod as any).default?.createRequire;
+    const createRequire =
+      (moduleMod as any).createRequire || (moduleMod as any).default?.createRequire;
 
     let pluginDir: string;
     try {

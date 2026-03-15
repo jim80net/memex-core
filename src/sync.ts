@@ -1,5 +1,5 @@
 import { execFile } from "node:child_process";
-import { mkdir, readFile, readdir, stat, writeFile } from "node:fs/promises";
+import { mkdir, readdir, readFile, stat, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { promisify } from "node:util";
 import { getSyncProjectMemoryDir } from "./project-mapping.js";
@@ -172,9 +172,7 @@ export async function syncPull(config: SyncConfig, syncRepoDir: string): Promise
     if (resolved.length > 0) {
       try {
         await git(["rebase", "--continue"], syncRepoDir);
-        process.stderr.write(
-          `memex[sync]: auto-resolved conflicts in ${resolved.join(", ")}\n`,
-        );
+        process.stderr.write(`memex[sync]: auto-resolved conflicts in ${resolved.join(", ")}\n`);
         return `pulled with auto-resolved conflicts: ${resolved.join(", ")}`;
       } catch {
         await git(["rebase", "--abort"], syncRepoDir);
@@ -189,10 +187,7 @@ export async function syncPull(config: SyncConfig, syncRepoDir: string): Promise
     } catch {
       const mergeResolved = await resolveConflicts(syncRepoDir);
       if (mergeResolved.length > 0) {
-        await git(
-          ["commit", "--no-edit", "-m", "Auto-resolve merge conflicts"],
-          syncRepoDir,
-        );
+        await git(["commit", "--no-edit", "-m", "Auto-resolve merge conflicts"], syncRepoDir);
         return `pulled with merge + auto-resolved: ${mergeResolved.join(", ")}`;
       }
       try {

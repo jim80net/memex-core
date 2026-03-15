@@ -296,9 +296,7 @@ export class SkillIndex {
       }),
     ];
 
-    const statResults = (await Promise.all(statPromises)).filter(
-      (r): r is FileInfo => r !== null,
-    );
+    const statResults = (await Promise.all(statPromises)).filter((r): r is FileInfo => r !== null);
 
     const currentLocations = new Set(statResults.map((s) => s.location));
 

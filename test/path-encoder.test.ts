@@ -1,4 +1,4 @@
-import { describe, it, expect } from "vitest";
+import { describe, expect, it } from "vitest";
 import { encodeProjectPath } from "../src/path-encoder.ts";
 
 describe("encodeProjectPath", () => {
@@ -15,15 +15,11 @@ describe("encodeProjectPath", () => {
   });
 
   it("encodes a deep path", () => {
-    expect(encodeProjectPath("/home/user/projects/foo/bar")).toBe(
-      "-home-user-projects-foo-bar",
-    );
+    expect(encodeProjectPath("/home/user/projects/foo/bar")).toBe("-home-user-projects-foo-bar");
   });
 
   it("replaces underscores with hyphens", () => {
-    expect(encodeProjectPath("/home/dev_user/my_project")).toBe(
-      "-home-dev-user-my-project",
-    );
+    expect(encodeProjectPath("/home/dev_user/my_project")).toBe("-home-dev-user-my-project");
   });
 
   it("encodes a path with underscores matching Claude Code behavior", () => {

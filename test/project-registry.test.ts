@@ -1,12 +1,12 @@
-import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { mkdir, rm } from "node:fs/promises";
-import { join } from "node:path";
 import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import {
-  loadRegistry,
-  saveRegistry,
-  registerProject,
   getKnownProjects,
+  loadRegistry,
+  registerProject,
+  saveRegistry,
 } from "../src/project-registry.ts";
 import type { ProjectRegistry } from "../src/types.ts";
 

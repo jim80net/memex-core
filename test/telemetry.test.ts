@@ -1,13 +1,8 @@
-import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { mkdir, rm } from "node:fs/promises";
-import { join } from "node:path";
 import { tmpdir } from "node:os";
-import {
-  loadTelemetry,
-  saveTelemetry,
-  recordMatch,
-  getEntryTelemetry,
-} from "../src/telemetry.ts";
+import { join } from "node:path";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { getEntryTelemetry, loadTelemetry, recordMatch, saveTelemetry } from "../src/telemetry.ts";
 import type { TelemetryData } from "../src/types.ts";
 
 describe("telemetry", () => {

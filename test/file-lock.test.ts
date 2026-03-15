@@ -1,7 +1,7 @@
-import { describe, it, expect, afterEach } from "vitest";
 import { mkdir, rm, stat } from "node:fs/promises";
-import { join } from "node:path";
 import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { afterEach, describe, expect, it } from "vitest";
 import { acquireLock, withFileLock } from "../src/file-lock.ts";
 
 describe("file-lock", () => {
@@ -16,7 +16,7 @@ describe("file-lock", () => {
     await mkdir(testDir, { recursive: true });
 
     const unlock = await acquireLock(testFile);
-    const lockDir = testFile + ".lock";
+    const lockDir = `${testFile}.lock`;
     const s = await stat(lockDir);
     expect(s.isDirectory()).toBe(true);
 
@@ -36,7 +36,7 @@ describe("file-lock", () => {
     expect(callbackRan).toBe(true);
     expect(result).toBe(42);
 
-    const lockDir = testFile + ".lock";
+    const lockDir = `${testFile}.lock`;
     await expect(stat(lockDir)).rejects.toThrow();
   });
 
@@ -49,7 +49,7 @@ describe("file-lock", () => {
       }),
     ).rejects.toThrow("callback error");
 
-    const lockDir = testFile + ".lock";
+    const lockDir = `${testFile}.lock`;
     await expect(stat(lockDir)).rejects.toThrow();
   });
 
