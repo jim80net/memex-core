@@ -1,4 +1,10 @@
 node_modules/
 dist/
 *.tgz
+*.deb
 .DS_Store
+.gitnexus
+.claude/settings.local.json
+.claude/skills/
+AGENTS.md
+CLAUDE.md

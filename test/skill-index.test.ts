@@ -1,12 +1,12 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { mkdir, writeFile, rm } from "node:fs/promises";
-import { join } from "node:path";
+import { mkdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { parseFrontmatter, parseMemoryFile, SkillIndex } from "../src/skill-index.ts";
-import { cosineSimilarity } from "../src/embeddings.ts";
-import type { EmbeddingProvider } from "../src/embeddings.ts";
+import { join } from "node:path";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { DEFAULT_CORE_CONFIG } from "../src/config.ts";
+import type { EmbeddingProvider } from "../src/embeddings.ts";
+import { cosineSimilarity } from "../src/embeddings.ts";
 import type { ScanDirs } from "../src/skill-index.ts";
+import { parseFrontmatter, parseMemoryFile, SkillIndex } from "../src/skill-index.ts";
 
 // ---------------------------------------------------------------------------
 // Frontmatter parsing
@@ -258,7 +258,10 @@ describe("SkillIndex", () => {
   }
 
   beforeEach(async () => {
-    testDir = join(tmpdir(), `skill-index-test-${Date.now()}-${Math.random().toString(36).slice(2)}`);
+    testDir = join(
+      tmpdir(),
+      `skill-index-test-${Date.now()}-${Math.random().toString(36).slice(2)}`,
+    );
     cachePath = join(testDir, "cache", "skill-router.json");
     await mkdir(join(testDir, "skills", "weather"), { recursive: true });
     await mkdir(join(testDir, "skills", "git"), { recursive: true });
@@ -311,9 +314,7 @@ describe("SkillIndex", () => {
   });
 
   it("search returns results above threshold (absolute mode)", async () => {
-    mockEmbed
-      .mockResolvedValueOnce(makeEmbeddings(2))
-      .mockResolvedValueOnce([[1, 0, 0, 0]]);
+    mockEmbed.mockResolvedValueOnce(makeEmbeddings(2)).mockResolvedValueOnce([[1, 0, 0, 0]]);
 
     const index = new SkillIndex({ ...DEFAULT_CORE_CONFIG }, mockProvider, cachePath);
     await index.build(makeScanDirs(testDir));
@@ -324,9 +325,7 @@ describe("SkillIndex", () => {
   });
 
   it("search filters results below threshold", async () => {
-    mockEmbed
-      .mockResolvedValueOnce(makeEmbeddings(2))
-      .mockResolvedValueOnce([[1, 0, 0, 0]]);
+    mockEmbed.mockResolvedValueOnce(makeEmbeddings(2)).mockResolvedValueOnce([[1, 0, 0, 0]]);
 
     const index = new SkillIndex({ ...DEFAULT_CORE_CONFIG }, mockProvider, cachePath);
     await index.build(makeScanDirs(testDir));
@@ -342,9 +341,7 @@ describe("SkillIndex", () => {
       `---\nname: weather\ndescription: Get weather\ntype: memory\n---\nWeather info.`,
     );
 
-    mockEmbed
-      .mockResolvedValueOnce(makeEmbeddings(2))
-      .mockResolvedValueOnce([[0.5, 0.5, 0, 0]]);
+    mockEmbed.mockResolvedValueOnce(makeEmbeddings(2)).mockResolvedValueOnce([[0.5, 0.5, 0, 0]]);
 
     const index = new SkillIndex({ ...DEFAULT_CORE_CONFIG }, mockProvider, cachePath);
     await index.build(makeScanDirs(testDir));
@@ -356,9 +353,7 @@ describe("SkillIndex", () => {
   });
 
   it("search respects topK limit", async () => {
-    mockEmbed
-      .mockResolvedValueOnce(makeEmbeddings(2))
-      .mockResolvedValueOnce([[1, 1, 0, 0]]);
+    mockEmbed.mockResolvedValueOnce(makeEmbeddings(2)).mockResolvedValueOnce([[1, 1, 0, 0]]);
 
     const index = new SkillIndex({ ...DEFAULT_CORE_CONFIG }, mockProvider, cachePath);
     await index.build(makeScanDirs(testDir));
@@ -467,9 +462,7 @@ Always use pnpm for all package management.`,
   });
 
   it("relative scoring mode drops results far below best", async () => {
-    mockEmbed
-      .mockResolvedValueOnce(makeEmbeddings(2))
-      .mockResolvedValueOnce([[1, 0, 0, 0]]); // perfect match on first skill only
+    mockEmbed.mockResolvedValueOnce(makeEmbeddings(2)).mockResolvedValueOnce([[1, 0, 0, 0]]); // perfect match on first skill only
 
     const index = new SkillIndex({ ...DEFAULT_CORE_CONFIG }, mockProvider, cachePath);
     await index.build(makeScanDirs(testDir));
@@ -482,9 +475,7 @@ Always use pnpm for all package management.`,
 
   it("relative scoring returns nothing if best is below floor", async () => {
     // Use orthogonal query vector so all scores are 0
-    mockEmbed
-      .mockResolvedValueOnce(makeEmbeddings(2))
-      .mockResolvedValueOnce([[0, 0, 1, 0]]);
+    mockEmbed.mockResolvedValueOnce(makeEmbeddings(2)).mockResolvedValueOnce([[0, 0, 1, 0]]);
 
     const index = new SkillIndex({ ...DEFAULT_CORE_CONFIG }, mockProvider, cachePath);
     await index.build(makeScanDirs(testDir));

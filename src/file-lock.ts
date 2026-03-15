@@ -9,7 +9,7 @@ const STALE_LOCK_MS = 30_000;
  * Returns an unlock function.
  */
 export async function acquireLock(filePath: string): Promise<() => Promise<void>> {
-  const lockDir = filePath + ".lock";
+  const lockDir = `${filePath}.lock`;
   const deadline = Date.now() + LOCK_TIMEOUT_MS;
 
   while (Date.now() < deadline) {

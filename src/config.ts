@@ -36,8 +36,7 @@ export function resolveCoreConfig(partial?: Partial<MemexCoreConfig>): MemexCore
     topK: typeof partial.topK === "number" ? partial.topK : DEFAULT_CORE_CONFIG.topK,
     threshold:
       typeof partial.threshold === "number" ? partial.threshold : DEFAULT_CORE_CONFIG.threshold,
-    scoringMode:
-      partial.scoringMode === "absolute" ? "absolute" : DEFAULT_CORE_CONFIG.scoringMode,
+    scoringMode: partial.scoringMode === "absolute" ? "absolute" : DEFAULT_CORE_CONFIG.scoringMode,
     maxDropoff:
       typeof partial.maxDropoff === "number" ? partial.maxDropoff : DEFAULT_CORE_CONFIG.maxDropoff,
     maxInjectedChars:

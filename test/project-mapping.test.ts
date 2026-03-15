@@ -1,4 +1,4 @@
-import { describe, it, expect } from "vitest";
+import { describe, expect, it } from "vitest";
 import { normalizeGitUrl } from "../src/project-mapping.ts";
 
 describe("normalizeGitUrl", () => {
@@ -25,9 +25,7 @@ describe("normalizeGitUrl", () => {
   });
 
   it("handles SSH URLs with nested paths", () => {
-    expect(normalizeGitUrl("git@github.com:org/sub/repo.git")).toBe(
-      "github.com/org/sub/repo",
-    );
+    expect(normalizeGitUrl("git@github.com:org/sub/repo.git")).toBe("github.com/org/sub/repo");
   });
 
   it("trims whitespace", () => {
