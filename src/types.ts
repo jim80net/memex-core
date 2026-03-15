@@ -149,6 +149,8 @@ export type MemexPaths = {
   sessionsDir: string;
   syncRepoDir: string;
   projectsDir: string;
+  globalSkillsDir: string;
+  globalRulesDir: string;
   telemetryPath: string;
   registryPath: string;
   tracesDir: string;
