@@ -1,6 +1,6 @@
 # @jim80net/memex-core
 
-Shared core engine for semantic skill, memory, and rule routing in AI agent systems. Provides local embedding generation (via ONNX), a vector-similarity search index, file caching, session tracking, telemetry, cross-device sync, and execution traces -- all with no external API keys required. This package is consumed by platform-specific routers like [claude-skill-router](https://github.com/jim80net/claude-skill-router) (Claude Code hooks) and [openclaw-skill-router](https://github.com/jim80net/openclaw-skill-router) (OpenClaw plugin).
+Shared core engine for semantic skill, memory, and rule routing in AI agent systems. Provides local embedding generation (via ONNX), a vector-similarity search index, file caching, session tracking, telemetry, cross-device sync, and execution traces -- all with no external API keys required. This package is consumed by platform-specific routers like [memex-claude](https://github.com/jim80net/memex-claude) (Claude Code hooks) and [memex-openclaw](https://github.com/jim80net/memex-openclaw) (OpenClaw plugin).
 
 ## Install
 
