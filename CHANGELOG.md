@@ -1,5 +1,14 @@
 # Changelog
 
+## [0.2.1](https://github.com/jim80net/memex-core/compare/memex-core-v0.2.0...memex-core-v0.2.1) (2026-03-15)
+
+
+### Bug Fixes
+
+* add NPM_TOKEN for npm publish authentication ([6b7ba38](https://github.com/jim80net/memex-core/commit/6b7ba38fde3f08cbe54fa1b2b5ac2215ba3d96b1))
+* use npm OIDC trusted publishing instead of token auth ([4b6d379](https://github.com/jim80net/memex-core/commit/4b6d379afb5a63283160b365a432d1c6067eda6e))
+* use npm OIDC trusted publishing instead of token auth ([dee6e5e](https://github.com/jim80net/memex-core/commit/dee6e5e265d8148cbe55d3e5ad086bb7e206ca66))
+
 ## [0.2.0](https://github.com/jim80net/memex-core/compare/memex-core-v0.1.0...memex-core-v0.2.0) (2026-03-15)
 
 
