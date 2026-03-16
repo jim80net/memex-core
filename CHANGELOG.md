@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.3.0](https://github.com/jim80net/memex-core/compare/memex-core-v0.2.3...memex-core-v0.3.0) (2026-03-16)
+
+
+### Features
+
+* add GEPA foundation — Observation type, query attribution, boost, telemetry reports ([#12](https://github.com/jim80net/memex-core/issues/12)) ([36d47f5](https://github.com/jim80net/memex-core/commit/36d47f51984111aa7e038c818cd948c6d1899f5d))
+
 ## [0.2.3](https://github.com/jim80net/memex-core/compare/memex-core-v0.2.2...memex-core-v0.2.3) (2026-03-16)
 
 
