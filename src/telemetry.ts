@@ -1,9 +1,10 @@
 import { randomBytes } from "node:crypto";
 import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import { dirname } from "node:path";
-import type { EntryTelemetry, TelemetryData } from "./types.js";
+import type { EntryTelemetry, Observation, TelemetryData } from "./types.js";
 
 const MAX_SESSION_IDS = 50;
+const MAX_OBSERVATIONS = 100;
 
 export async function loadTelemetry(telemetryPath: string): Promise<TelemetryData> {
   const empty: TelemetryData = { version: 1, entries: {} };
@@ -27,8 +28,14 @@ export async function saveTelemetry(telemetryPath: string, data: TelemetryData):
 
 /**
  * Record that a skill was matched and injected. Mutates in place.
+ * When queryIndex is provided, also increments queryHits for that index.
  */
-export function recordMatch(telemetry: TelemetryData, location: string, sessionId: string): void {
+export function recordMatch(
+  telemetry: TelemetryData,
+  location: string,
+  sessionId: string,
+  queryIndex?: number,
+): void {
   const now = new Date().toISOString();
   const existing = telemetry.entries[location];
 
@@ -41,14 +48,76 @@ export function recordMatch(telemetry: TelemetryData, location: string, sessionI
         existing.sessionIds = existing.sessionIds.slice(-MAX_SESSION_IDS);
       }
     }
+    if (queryIndex !== undefined) {
+      existing.queryHits = existing.queryHits ?? {};
+      const key = String(queryIndex);
+      existing.queryHits[key] = (existing.queryHits[key] ?? 0) + 1;
+    }
   } else {
-    telemetry.entries[location] = {
+    const entry: EntryTelemetry = {
       matchCount: 1,
       lastMatched: now,
       firstMatched: now,
       sessionIds: [sessionId],
     };
+    if (queryIndex !== undefined) {
+      entry.queryHits = { [String(queryIndex)]: 1 };
+    }
+    telemetry.entries[location] = entry;
   }
+}
+
+/**
+ * Append an observation to an entry's observations array. Caps at MAX_OBSERVATIONS.
+ */
+export function recordObservation(
+  telemetry: TelemetryData,
+  location: string,
+  observation: Observation,
+): void {
+  const entry = telemetry.entries[location];
+  if (!entry) return;
+
+  entry.observations = entry.observations ?? [];
+  entry.observations.push(observation);
+  if (entry.observations.length > MAX_OBSERVATIONS) {
+    entry.observations = entry.observations.slice(-MAX_OBSERVATIONS);
+  }
+}
+
+/**
+ * Clear all observations from an entry.
+ */
+export function clearObservations(telemetry: TelemetryData, location: string): void {
+  const entry = telemetry.entries[location];
+  if (!entry) return;
+  delete entry.observations;
+}
+
+/**
+ * Format a telemetry report as a human-readable table string.
+ */
+export function formatTelemetryReport(telemetry: TelemetryData): string {
+  const entries = Object.entries(telemetry.entries);
+  if (entries.length === 0) return "No telemetry data.";
+
+  const lines: string[] = [];
+  lines.push("Entry | Matches | Sessions | Last Match | Obs | Query Hits");
+  lines.push("--- | --- | --- | --- | --- | ---");
+
+  for (const [location, entry] of entries) {
+    const obsCount = entry.observations?.length ?? 0;
+    const queryHits = entry.queryHits
+      ? Object.entries(entry.queryHits)
+          .map(([idx, count]) => `q${idx}:${count}`)
+          .join(", ")
+      : "-";
+    lines.push(
+      `${location} | ${entry.matchCount} | ${entry.sessionIds.length} | ${entry.lastMatched} | ${obsCount} | ${queryHits}`,
+    );
+  }
+
+  return lines.join("\n");
 }
 
 /**

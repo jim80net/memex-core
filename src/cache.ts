@@ -48,6 +48,7 @@ export function toCachedSkill(skill: IndexedSkill, mtime: number): CachedSkill {
     mtime,
     type: skill.type,
     oneLiner: skill.oneLiner,
+    boost: skill.boost,
   };
 }
 
@@ -60,5 +61,6 @@ export function fromCachedSkill(location: string, cached: CachedSkill): IndexedS
     embeddings: cached.embeddings,
     queries: cached.queries,
     oneLiner: cached.oneLiner,
+    boost: cached.boost,
   };
 }

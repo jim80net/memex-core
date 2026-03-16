@@ -41,8 +41,8 @@ await index.build({
 
 // 4. Search
 const results = await index.search("how do I deploy?", config.topK, config.threshold);
-for (const { skill, score } of results) {
-  console.log(`${skill.name} (${skill.type}): ${score.toFixed(3)}`);
+for (const { skill, score, bestQueryIndex } of results) {
+  console.log(`${skill.name} (${skill.type}): ${score.toFixed(3)} [query #${bestQueryIndex}]`);
   const content = await index.readSkillContent(skill.location);
   console.log(content);
 }
@@ -57,7 +57,7 @@ for (const { skill, score } of results) {
 | `cache` | Persistent embedding cache (version 2). Loads/saves a JSON file keyed by file location and gated by mtime. |
 | `config` | `DEFAULT_CORE_CONFIG` and `resolveCoreConfig()` for merging partial config with type-safe defaults. |
 | `session` | `SessionTracker` interface and `InMemorySessionTracker` for tracking which rules have been shown per session (graduated disclosure). |
-| `telemetry` | Match telemetry: records how often each skill/rule/memory is matched, across which sessions. |
+| `telemetry` | Match telemetry: records how often each skill/rule/memory is matched, across which sessions. Tracks per-query hit counts, observations (ASI from deep-sleep), and generates formatted reports. |
 | `sync` | Git-based cross-device sync: pull with auto-conflict resolution, commit and push local changes. |
 | `traces` | `TraceAccumulator` for recording execution traces (skills injected, tools called, outcome) per session. |
 | `file-lock` | Advisory file locking via `mkdir` (atomic on all platforms). `withFileLock()` for safe concurrent writes. |
@@ -89,7 +89,7 @@ Two built-in implementations:
 The central class. Constructed with `(config, provider, cachePath)`.
 
 - **`build(scanDirs)`** -- Scans `skillDirs`, `memoryDirs`, and `ruleDirs` for markdown files. Parses frontmatter, generates embeddings for queries, and caches results. Skips unchanged files (mtime-gated). The consumer constructs the `ScanDirs` object -- no paths are hardcoded.
-- **`search(query, topK, threshold, typeFilter?, scoringMode?, maxDropoff?)`** -- Embeds the query, computes cosine similarity against all indexed entries, and returns the top matches.
+- **`search(query, topK, threshold, typeFilter?, scoringMode?, maxDropoff?)`** -- Embeds the query, computes cosine similarity against all indexed entries, applies per-skill `boost`, and returns the top matches. Each result includes `bestQueryIndex` (the index into `skill.queries` that matched best).
 - **`readSkillContent(location)`** -- Reads the body content of a matched skill, stripping frontmatter. Handles memory sections (locations like `path#SectionName`).
 - **`needsRebuild()`** -- Returns `true` if the cache TTL (`cacheTimeMs`) has expired.
 
@@ -147,10 +147,11 @@ paths:
 hooks:
   - PreToolUse
 one-liner: Short reminder text for repeated matches
+boost: 0.05
 ---
 ```
 
-`queries` and `keywords` are embedded and used for similarity search. `one-liner` is used for graduated disclosure (full content on first match, one-liner on subsequent matches in the same session).
+`queries` and `keywords` are embedded and used for similarity search. `one-liner` is used for graduated disclosure (full content on first match, one-liner on subsequent matches in the same session). `boost` is an optional float added to the raw similarity score before threshold comparison -- use it to nudge skills that are consistently near the threshold boundary.
 
 ## Configuration
 

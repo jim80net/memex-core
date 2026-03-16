@@ -30,11 +30,13 @@ export type IndexedSkill = {
   embeddings: number[][];
   queries: string[];
   oneLiner?: string;
+  boost?: number;
 };
 
 export type SkillSearchResult = {
   skill: IndexedSkill;
   score: number;
+  bestQueryIndex: number;
 };
 
 export type ParsedFrontmatter = {
@@ -46,6 +48,7 @@ export type ParsedFrontmatter = {
   hooks?: string[];
   keywords?: string[];
   oneLiner?: string;
+  boost?: number;
   [key: string]: unknown;
 };
 
@@ -66,6 +69,7 @@ export type CachedSkill = {
   mtime: number;
   type: SkillType;
   oneLiner?: string;
+  boost?: number;
 };
 
 export type CacheData = {
@@ -105,11 +109,23 @@ export type HookOutput = {
 // Telemetry
 // ---------------------------------------------------------------------------
 
+export type Observation = {
+  sessionId: string;
+  prompt: string;
+  score: number;
+  queryIndex: number;
+  outcome: "used" | "ignored" | "corrected" | "missed";
+  diagnosis: string;
+  timestamp: string;
+};
+
 export type EntryTelemetry = {
   matchCount: number;
   lastMatched: string; // ISO timestamp
   firstMatched: string; // ISO timestamp
   sessionIds: string[]; // unique session IDs (capped)
+  queryHits?: Record<string, number>; // queryIndex (string key) -> hit count
+  observations?: Observation[]; // ASI from deep-sleep, capped at 100
 };
 
 export type TelemetryData = {

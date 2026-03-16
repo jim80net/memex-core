@@ -130,6 +130,39 @@ body`;
     expect(meta.queries).toEqual(["how do I test?"]);
     expect(meta.keywords).toEqual(["testing"]);
   });
+
+  it("parses boost as a float from frontmatter", () => {
+    const content = `---
+name: boosted-skill
+description: A skill with boost
+boost: 0.05
+---
+body`;
+    const { meta } = parseFrontmatter(content);
+    expect(meta.boost).toBe(0.05);
+  });
+
+  it("parses negative boost", () => {
+    const content = `---
+name: demoted
+description: A skill with negative boost
+boost: -0.1
+---
+body`;
+    const { meta } = parseFrontmatter(content);
+    expect(meta.boost).toBe(-0.1);
+  });
+
+  it("ignores non-numeric boost", () => {
+    const content = `---
+name: bad-boost
+description: A skill with bad boost
+boost: high
+---
+body`;
+    const { meta } = parseFrontmatter(content);
+    expect(meta.boost).toBeUndefined();
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -537,5 +570,82 @@ Always use pnpm for all package management.`,
     // Both skills have embeddings [1,0,0,0] and [0,1,0,0]; query is [0,0,1,0] → cosine 0
     const results = await index.search("nope", 3, 0.5, undefined, "relative", 0.1);
     expect(results).toHaveLength(0);
+  });
+
+  it("search returns bestQueryIndex (argmax of similarities)", async () => {
+    // Weather skill with 3 queries → 3 embeddings, git skill with 1 query → 1 embedding
+    await writeFile(
+      join(testDir, "skills", "weather", "SKILL.md"),
+      `---\nname: weather\ndescription: Get weather\nqueries:\n  - "What is the weather?"\n  - "Will it rain?"\n  - "Temperature today"\n---\n# Weather`,
+    );
+    // Scan order is alphabetical: git (1 query) then weather (3 queries) = 4 total
+    // git q0=[1,0,0,0], weather q0=[0,1,0,0], weather q1=[0,0,1,0], weather q2=[0,0,0,1]
+    // Query [0,0,1,0] → weather similarities: q0=0, q1=1, q2=0 → bestQueryIndex=1
+    mockEmbed
+      .mockResolvedValueOnce([
+        [1, 0, 0, 0], // git q0
+        [0, 1, 0, 0], // weather q0
+        [0, 0, 1, 0], // weather q1 ← best match
+        [0, 0, 0, 1], // weather q2
+      ])
+      .mockResolvedValueOnce([[0, 0, 1, 0]]); // search query
+
+    const index = new SkillIndex({ ...DEFAULT_CORE_CONFIG }, mockProvider, cachePath);
+    await index.build(makeScanDirs(testDir));
+
+    const results = await index.search("temperature", 3, 0.5);
+    const weather = results.find((r) => r.skill.name === "weather");
+    expect(weather).toBeDefined();
+    expect(weather!.bestQueryIndex).toBe(1);
+  });
+
+  it("boost affects ranking", async () => {
+    // Give git a boost that pushes it above weather
+    await writeFile(
+      join(testDir, "skills", "git", "SKILL.md"),
+      `---\nname: git\ndescription: Git version control operations\nboost: 0.6\n---\n# Git\n\nRun git commands.`,
+    );
+    // Scan order: git first, weather second
+    // Git embedding: [1,0,0,0], Weather embedding: [0,1,0,0]
+    // Query: [0.3,0.7,0,0] → git cosine ~0.39, weather cosine ~0.92
+    // Without boost: weather wins. With boost 0.6: git = 0.39+0.6 = 0.99 > 0.92
+    mockEmbed
+      .mockResolvedValueOnce([
+        [1, 0, 0, 0], // git
+        [0, 1, 0, 0], // weather
+      ])
+      .mockResolvedValueOnce([[0.3, 0.7, 0, 0]]);
+
+    const index = new SkillIndex({ ...DEFAULT_CORE_CONFIG }, mockProvider, cachePath);
+    await index.build(makeScanDirs(testDir));
+
+    const results = await index.search("query", 3, 0.0);
+    expect(results[0].skill.name).toBe("git");
+  });
+
+  it("boost affects threshold crossing", async () => {
+    // Skill just below threshold can cross it with boost
+    await writeFile(
+      join(testDir, "skills", "git", "SKILL.md"),
+      `---\nname: git\ndescription: Git version control operations\nboost: 0.3\n---\n# Git\n\nRun git commands.`,
+    );
+    // Scan order: git first, weather second
+    // git embedding=[1,0,0,0], weather embedding=[0,1,0,0]
+    // Query: [0,1,0,0] → git raw=0.0, weather raw=1.0
+    // With boost 0.3: git = 0.3 (crosses threshold 0.2)
+    mockEmbed
+      .mockResolvedValueOnce([
+        [1, 0, 0, 0], // git
+        [0, 1, 0, 0], // weather
+      ])
+      .mockResolvedValueOnce([[0, 1, 0, 0]]);
+
+    const index = new SkillIndex({ ...DEFAULT_CORE_CONFIG }, mockProvider, cachePath);
+    await index.build(makeScanDirs(testDir));
+
+    const results = await index.search("weather", 3, 0.2);
+    const gitResult = results.find((r) => r.skill.name === "git");
+    expect(gitResult).toBeDefined();
+    expect(gitResult!.score).toBeCloseTo(0.3);
   });
 });
