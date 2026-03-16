@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.2.3](https://github.com/jim80net/memex-core/compare/memex-core-v0.2.2...memex-core-v0.2.3) (2026-03-16)
+
+
+### Bug Fixes
+
+* parseMemoryFile now handles frontmatter-based memory files ([#10](https://github.com/jim80net/memex-core/issues/10)) ([2b98dd8](https://github.com/jim80net/memex-core/commit/2b98dd85b968bf2c2a0c333bb807144a5600cd84))
+
 ## [0.2.2](https://github.com/jim80net/memex-core/compare/memex-core-v0.2.1...memex-core-v0.2.2) (2026-03-15)
 
 
