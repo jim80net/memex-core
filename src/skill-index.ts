@@ -80,12 +80,44 @@ export function parseFrontmatter(content: string): { meta: ParsedFrontmatter; bo
 
 /**
  * Parse a memory markdown file into sections.
- * Extracts ## sections and looks for `Triggers:` lines as queries.
+ *
+ * Supports two formats:
+ * 1. **Frontmatter-based** (individual memory files):
+ *    ```
+ *    ---
+ *    name: my-memory
+ *    description: What this memory is about
+ *    type: feedback
+ *    queries:
+ *      - "query one"
+ *    ---
+ *    Body content here.
+ *    ```
+ * 2. **Section-based** (multi-section MEMORY.md style):
+ *    ```
+ *    ## Section Name
+ *    Body content
+ *    Triggers: "query one", "query two"
+ *    ```
  */
 export function parseMemoryFile(
   content: string,
-  _filePath: string,
+  filePath: string,
 ): Array<{ name: string; description: string; queries: string[]; body: string }> {
+  // Try frontmatter format first
+  const { meta, body } = parseFrontmatter(content);
+  if (meta.name || meta.description) {
+    const name = meta.name || basename(filePath, ".md");
+    const description = meta.description || body.split("\n")[0]?.trim() || name;
+    const queries = meta.queries?.length ? meta.queries : [];
+    const trimmed = body.trim();
+    if (trimmed.length > 0 || queries.length > 0) {
+      return [{ name, description, queries, body: trimmed }];
+    }
+    return [];
+  }
+
+  // Fall back to ## section-based format
   const results: Array<{ name: string; description: string; queries: string[]; body: string }> = [];
 
   const sections = content.split(/^(?=##\s)/m);
