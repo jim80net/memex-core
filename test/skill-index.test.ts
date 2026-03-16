@@ -200,6 +200,60 @@ Second line is extra detail.
     const sections = parseMemoryFile(content, "/test/memory.md");
     expect(sections).toEqual([]);
   });
+
+  it("parses frontmatter-based memory files", () => {
+    const content = `---
+name: destructive-git-ops
+description: User handles destructive git operations manually
+type: feedback
+---
+
+Never run destructive git commands.
+
+**Why:** The user wants control over irreversible changes.`;
+    const sections = parseMemoryFile(content, "/test/feedback_git.md");
+    expect(sections).toHaveLength(1);
+    expect(sections[0].name).toBe("destructive-git-ops");
+    expect(sections[0].description).toBe("User handles destructive git operations manually");
+    expect(sections[0].queries).toEqual([]);
+    expect(sections[0].body).toContain("Never run destructive git commands");
+  });
+
+  it("parses frontmatter memory with queries", () => {
+    const content = `---
+name: prefer-pnpm
+description: Always use pnpm instead of npm
+queries:
+  - "install dependencies"
+  - "npm install"
+---
+
+Use pnpm for all package operations.`;
+    const sections = parseMemoryFile(content, "/test/memory_pnpm.md");
+    expect(sections).toHaveLength(1);
+    expect(sections[0].name).toBe("prefer-pnpm");
+    expect(sections[0].queries).toEqual(["install dependencies", "npm install"]);
+  });
+
+  it("derives name from filename when frontmatter lacks name", () => {
+    const content = `---
+description: A memory without a name field
+---
+
+Some content.`;
+    const sections = parseMemoryFile(content, "/test/my-memory.md");
+    expect(sections).toHaveLength(1);
+    expect(sections[0].name).toBe("my-memory");
+  });
+
+  it("returns empty for frontmatter-only file with no body or queries", () => {
+    const content = `---
+name: empty-memory
+description: Nothing here
+---`;
+    const sections = parseMemoryFile(content, "/test/empty.md");
+    expect(sections).toHaveLength(0);
+  });
 });
 
 // ---------------------------------------------------------------------------
