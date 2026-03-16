@@ -114,4 +114,34 @@ describe("cache", () => {
     // IndexedSkill should NOT have mtime
     expect((skill as any).mtime).toBeUndefined();
   });
+
+  it("boost round-trips through toCachedSkill/fromCachedSkill", () => {
+    const skill: IndexedSkill = {
+      name: "boosted",
+      description: "desc",
+      location: "/boosted/SKILL.md",
+      type: "skill",
+      embeddings: [[1, 2, 3]],
+      queries: ["q1"],
+      boost: 0.15,
+    };
+    const cached = toCachedSkill(skill, 1000);
+    expect(cached.boost).toBe(0.15);
+
+    const restored = fromCachedSkill("/boosted/SKILL.md", cached);
+    expect(restored.boost).toBe(0.15);
+  });
+
+  it("backward compat: old cache without boost loads as undefined", () => {
+    const cached = {
+      name: "old",
+      description: "desc",
+      queries: ["q1"],
+      embeddings: [[1, 2, 3]],
+      mtime: 999,
+      type: "skill" as const,
+    };
+    const skill = fromCachedSkill("/old/SKILL.md", cached);
+    expect(skill.boost).toBeUndefined();
+  });
 });

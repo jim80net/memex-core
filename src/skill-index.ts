@@ -52,6 +52,10 @@ export function parseFrontmatter(content: string): { meta: ParsedFrontmatter; bo
     if (key === "description") meta.description = value;
     if (key === "type") meta.type = value as SkillType;
     if (key === "one-liner") meta.oneLiner = value;
+    if (key === "boost") {
+      const parsed = Number.parseFloat(value);
+      if (!Number.isNaN(parsed)) meta.boost = parsed;
+    }
 
     // List keys — block-style (empty value + indented items) or inline value
     if (LIST_KEYS.has(key)) {
@@ -247,6 +251,7 @@ type ToEmbed = {
   mtime: number;
   body: string;
   oneLiner?: string;
+  boost?: number;
 };
 
 export class SkillIndex {
@@ -415,6 +420,7 @@ export class SkillIndex {
           embeddings,
           queries: item.queries,
           oneLiner: item.oneLiner,
+          boost: item.boost,
         };
 
         const existing = this.skills.findIndex((s) => s.location === item.location);
@@ -483,8 +489,10 @@ export class SkillIndex {
 
     const scored = candidates.map((skill) => {
       const similarities = skill.embeddings.map((e) => cosineSimilarity(queryEmbedding, e));
-      const score = Math.max(...similarities);
-      return { skill, score };
+      const bestQueryIndex = similarities.indexOf(Math.max(...similarities));
+      const rawScore = Math.max(...similarities);
+      const score = rawScore + (skill.boost ?? 0);
+      return { skill, score, bestQueryIndex };
     });
 
     const sorted = scored.sort((a, b) => b.score - a.score);
@@ -540,6 +548,7 @@ export class SkillIndex {
       mtime: info.mtime,
       body,
       oneLiner: meta.oneLiner,
+      boost: meta.boost,
     });
   }
 
@@ -589,6 +598,7 @@ export class SkillIndex {
       mtime: info.mtime,
       body,
       oneLiner,
+      boost: meta.boost,
     });
   }
 }
