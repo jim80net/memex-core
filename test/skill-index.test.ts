@@ -623,6 +623,48 @@ Always use pnpm for all package management.`,
     expect(results[0].skill.name).toBe("git");
   });
 
+  it("deduplicates search results by skill name, keeping highest score", async () => {
+    // Simulate the same skill indexed from two different directories
+    // (e.g. original location + sync copy). Both have the same name but
+    // different file paths, so build() treats them as separate entries.
+    const syncDir = join(testDir, "sync-skills");
+    await mkdir(join(syncDir, "weather"), { recursive: true });
+    await writeFile(
+      join(syncDir, "weather", "SKILL.md"),
+      `---\nname: weather\ndescription: Get current weather and forecasts\n---\n# Weather\n\nFetch weather data.`,
+    );
+
+    // Build with two skill directories that both contain a "weather" skill
+    // 3 skills total: weather (original), git, weather (sync copy)
+    // Embeddings: weather1=[1,0,0,0], git=[0,1,0,0], weather2=[0,0,1,0]
+    mockEmbed.mockResolvedValueOnce([
+      [1, 0, 0, 0], // git (alphabetical: git before weather)
+      [0, 1, 0, 0], // weather (original)
+      [0, 0, 1, 0], // weather (sync)
+    ]);
+
+    const index = new SkillIndex({ ...DEFAULT_CORE_CONFIG }, mockProvider, cachePath);
+    await index.build({
+      skillDirs: [join(testDir, "skills"), syncDir],
+      memoryDirs: [],
+      ruleDirs: [],
+    });
+
+    expect(index.skillCount).toBe(3); // both copies indexed
+
+    // Search with a query that matches the original weather better than the sync copy
+    // Query: [0,1,0,0] → git=0, weather(original)=1.0, weather(sync)=0
+    mockEmbed.mockResolvedValueOnce([[0, 1, 0, 0]]);
+
+    const results = await index.search("what is the weather?", 5, 0.0);
+
+    // Should only get 2 results (git + one weather), not 3
+    const weatherResults = results.filter((r) => r.skill.name === "weather");
+    expect(weatherResults).toHaveLength(1);
+    expect(weatherResults[0].score).toBeCloseTo(1.0); // the higher-scoring copy
+    expect(results).toHaveLength(2); // weather + git
+  });
+
   it("boost affects threshold crossing", async () => {
     // Skill just below threshold can cross it with boost
     await writeFile(
