@@ -497,16 +497,25 @@ export class SkillIndex {
 
     const sorted = scored.sort((a, b) => b.score - a.score);
 
+    // Deduplicate by skill name — when the same skill appears from multiple
+    // scan directories (e.g. original + sync copy), keep only the highest-scoring entry.
+    const seen = new Set<string>();
+    const deduped = sorted.filter((r) => {
+      if (seen.has(r.skill.name)) return false;
+      seen.add(r.skill.name);
+      return true;
+    });
+
     if (scoringMode === "relative") {
       // Relative mode: if the best match clears the floor, inject top-K
       // but drop results that fall too far below the best
-      if (sorted.length === 0 || sorted[0].score < threshold) return [];
-      const bestScore = sorted[0].score;
-      return sorted.filter((r) => bestScore - r.score <= maxDropoff).slice(0, topK);
+      if (deduped.length === 0 || deduped[0].score < threshold) return [];
+      const bestScore = deduped[0].score;
+      return deduped.filter((r) => bestScore - r.score <= maxDropoff).slice(0, topK);
     }
 
     // Absolute mode: each result must individually pass threshold
-    return sorted.filter((r) => r.score >= threshold).slice(0, topK);
+    return deduped.filter((r) => r.score >= threshold).slice(0, topK);
   }
 
   /**
