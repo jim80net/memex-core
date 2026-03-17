@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.3.1](https://github.com/jim80net/memex-core/compare/memex-core-v0.3.0...memex-core-v0.3.1) (2026-03-17)
+
+
+### Bug Fixes
+
+* deduplicate search results by skill name ([#14](https://github.com/jim80net/memex-core/issues/14)) ([bf95eeb](https://github.com/jim80net/memex-core/commit/bf95eeb3091f3cad7c1912a04fa15f8c6a010777))
+
 ## [0.3.0](https://github.com/jim80net/memex-core/compare/memex-core-v0.2.3...memex-core-v0.3.0) (2026-03-16)
 
 
