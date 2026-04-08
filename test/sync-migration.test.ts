@@ -1,5 +1,5 @@
 import { execFile } from "node:child_process";
-import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readdir, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
@@ -7,6 +7,7 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import {
   isMidRebaseOrMerge,
   mergeMarkdownBodies,
+  migrateProjectIdsToLowercase,
   readSyncRepoVersion,
   writeSyncRepoVersion,
 } from "../src/sync-migration.ts";
@@ -90,5 +91,59 @@ describe("isMidRebaseOrMerge", () => {
   it("returns true when .git/MERGE_HEAD exists", async () => {
     await writeFile(join(repoDir, ".git", "MERGE_HEAD"), "abc123\n", "utf-8");
     expect(await isMidRebaseOrMerge(repoDir)).toBe(true);
+  });
+});
+
+describe("migrateProjectIdsToLowercase - case-only rename", () => {
+  it("returns empty result when projects/ does not exist", async () => {
+    const result = await migrateProjectIdsToLowercase(repoDir);
+    expect(result).toEqual({ renamed: [], merged: [] });
+  });
+
+  it("returns empty result when no mixed-case dirs exist", async () => {
+    await writeTracked(repoDir, "projects/github.com/foo/bar/memory/notes.md", "clean");
+    await runGit(["add", "-A"], repoDir);
+    await runGit(["commit", "-m", "seed"], repoDir);
+
+    const result = await migrateProjectIdsToLowercase(repoDir);
+    expect(result).toEqual({ renamed: [], merged: [] });
+  });
+
+  it("renames a single mixed-case project id", async () => {
+    await writeTracked(repoDir, "projects/GitHub.com/Jim80Net/Repo/memory/notes.md", "hi");
+    await runGit(["add", "-A"], repoDir);
+    await runGit(["commit", "-m", "seed legacy"], repoDir);
+
+    const result = await migrateProjectIdsToLowercase(repoDir);
+
+    expect(result.renamed).toEqual(["GitHub.com/Jim80Net/Repo"]);
+    expect(result.merged).toEqual([]);
+
+    // Verify the new path exists and the old path does not
+    const newFile = join(repoDir, "projects/github.com/jim80net/repo/memory/notes.md");
+    await expect(stat(newFile)).resolves.toBeDefined();
+
+    const legacyEntries = await readdir(join(repoDir, "projects"));
+    expect(legacyEntries).not.toContain("GitHub.com");
+  });
+
+  it("renames deepest-first so parents do not clobber children", async () => {
+    await writeTracked(repoDir, "projects/Host/OwnerA/RepoA/memory/a.md", "a");
+    await writeTracked(repoDir, "projects/Host/OwnerB/RepoB/memory/b.md", "b");
+    await runGit(["add", "-A"], repoDir);
+    await runGit(["commit", "-m", "seed two legacy"], repoDir);
+
+    const result = await migrateProjectIdsToLowercase(repoDir);
+
+    expect(new Set(result.renamed)).toEqual(
+      new Set(["Host/OwnerA/RepoA", "Host/OwnerB/RepoB"]),
+    );
+
+    await expect(
+      stat(join(repoDir, "projects/host/ownera/repoa/memory/a.md")),
+    ).resolves.toBeDefined();
+    await expect(
+      stat(join(repoDir, "projects/host/ownerb/repob/memory/b.md")),
+    ).resolves.toBeDefined();
   });
 });
