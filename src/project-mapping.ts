@@ -67,21 +67,27 @@ async function getGitRemoteUrl(cwd: string): Promise<string | null> {
  * 1. Manual mapping from config (explicit override)
  * 2. Git remote URL → normalized to host/owner/repo
  * 3. Encoded cwd path → stored under _local/
+ *
+ * All three paths are lowercased by default. Set `syncConfig.caseSensitive`
+ * to `true` to preserve the original casing.
  */
 export async function resolveProjectId(cwd: string, syncConfig: SyncConfig): Promise<string> {
+  const preserveCase = syncConfig.caseSensitive === true;
+  const norm = (s: string) => (preserveCase ? s : s.toLowerCase());
+
   // 1. Manual mapping
   if (syncConfig.projectMappings[cwd]) {
-    return syncConfig.projectMappings[cwd];
+    return norm(syncConfig.projectMappings[cwd]);
   }
 
   // 2. Git remote URL
   const remoteUrl = await getGitRemoteUrl(cwd);
   if (remoteUrl) {
-    return normalizeGitUrl(remoteUrl);
+    return normalizeGitUrl(remoteUrl, preserveCase);
   }
 
   // 3. Encoded path fallback
-  return `_local/${encodeProjectPath(cwd)}`;
+  return `_local/${norm(encodeProjectPath(cwd))}`;
 }
 
 /**

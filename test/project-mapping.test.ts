@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { normalizeGitUrl } from "../src/project-mapping.ts";
+import { normalizeGitUrl, resolveProjectId } from "../src/project-mapping.ts";
 
 describe("normalizeGitUrl", () => {
   it("normalizes SSH git URLs", () => {
@@ -54,5 +54,47 @@ describe("normalizeGitUrl", () => {
     expect(normalizeGitUrl("git@GitHub.com:Jim80Net/Repo.git", true)).toBe(
       "GitHub.com/Jim80Net/Repo",
     );
+  });
+});
+
+describe("resolveProjectId", () => {
+  const baseConfig = {
+    enabled: true,
+    repo: "",
+    autoPull: false,
+    autoCommitPush: false,
+    projectMappings: {} as Record<string, string>,
+  };
+
+  it("lowercases manual mapping values by default", async () => {
+    const config = {
+      ...baseConfig,
+      projectMappings: { "/home/me/work": "MyOrg/MyProject" },
+    };
+    expect(await resolveProjectId("/home/me/work", config)).toBe("myorg/myproject");
+  });
+
+  it("preserves case in manual mappings when caseSensitive is true", async () => {
+    const config = {
+      ...baseConfig,
+      projectMappings: { "/home/me/work": "MyOrg/MyProject" },
+      caseSensitive: true,
+    };
+    expect(await resolveProjectId("/home/me/work", config)).toBe("MyOrg/MyProject");
+  });
+
+  it("lowercases _local encoded path fallback by default", async () => {
+    // Use a guaranteed-nonexistent path so getGitRemoteUrl returns null
+    // and we fall through to the encoded-path branch deterministically.
+    const id = await resolveProjectId("/does-not-exist-memex-test/SomeDir", baseConfig);
+    expect(id).toBe("_local/-does-not-exist-memex-test-somedir");
+  });
+
+  it("preserves encoded path case when caseSensitive is true", async () => {
+    const id = await resolveProjectId("/does-not-exist-memex-test/SomeDir", {
+      ...baseConfig,
+      caseSensitive: true,
+    });
+    expect(id).toBe("_local/-does-not-exist-memex-test-SomeDir");
   });
 });
