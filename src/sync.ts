@@ -4,6 +4,7 @@ import { join } from "node:path";
 import { promisify } from "node:util";
 import { getDefaultBranch, git, hasCommits, hasRemote, isGitRepo } from "./git-helpers.js";
 import { getSyncProjectMemoryDir } from "./project-mapping.js";
+import { runSyncMigrations } from "./sync-migration.js";
 import type { SyncConfig } from "./types.js";
 
 const execFileAsync = promisify(execFile);
@@ -99,8 +100,18 @@ export async function syncPull(config: SyncConfig, syncRepoDir: string): Promise
 
   await initSyncRepo(config, syncRepoDir);
 
-  if (!(await hasRemote(syncRepoDir))) return "no remote configured";
-  if (!(await hasCommits(syncRepoDir))) return "no commits yet";
+  if (!(await hasRemote(syncRepoDir))) {
+    // Local-only repo — migrate without remote coordination concerns.
+    await runSyncMigrations(config, syncRepoDir);
+    return "no remote configured";
+  }
+
+  if (!(await hasCommits(syncRepoDir))) {
+    // Fresh repo with a remote configured but nothing fetched yet.
+    // runSyncMigrations writes the marker so the first user commit carries it.
+    await runSyncMigrations(config, syncRepoDir);
+    return "no commits yet";
+  }
 
   try {
     await git(["fetch", "origin"], syncRepoDir);
@@ -111,6 +122,25 @@ export async function syncPull(config: SyncConfig, syncRepoDir: string): Promise
   const defaultBranch = await getDefaultBranch(syncRepoDir);
   const remoteBranch = `origin/${defaultBranch}`;
 
+  const pullResult = await pullWithConflictResolution(syncRepoDir, remoteBranch);
+  if (pullResult.startsWith("pull failed")) {
+    return pullResult;
+  }
+
+  // Migration runs only after a successful pull — never on stale local state.
+  await runSyncMigrations(config, syncRepoDir);
+  return pullResult;
+}
+
+/**
+ * Attempt rebase-first pull with fallback to merge, both with markdown
+ * conflict auto-resolution. Extracted so syncPull can cleanly run migration
+ * after any success path.
+ */
+async function pullWithConflictResolution(
+  syncRepoDir: string,
+  remoteBranch: string,
+): Promise<string> {
   try {
     await git(["rebase", remoteBranch], syncRepoDir);
     return "pulled successfully";
