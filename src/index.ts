@@ -15,6 +15,13 @@ export {
   syncCommitAndPush,
   syncPull,
 } from "./sync.js";
+export {
+  migrateProjectIdsToLowercase,
+  readSyncRepoVersion,
+  runSyncMigrations,
+  writeSyncRepoVersion,
+} from "./sync-migration.js";
+export type { MigrationResult } from "./sync-migration.js";
 export * from "./telemetry.js";
 export * from "./traces.js";
 export * from "./types.js";
