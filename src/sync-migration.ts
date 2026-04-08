@@ -252,14 +252,24 @@ export async function migrateProjectIdsToLowercase(syncRepoDir: string): Promise
 /**
  * Merge the contents of two distinct project directories (only reachable on
  * case-sensitive filesystems where both `Foo/` and `foo/` exist as separate
- * inodes). Walks `src/memory/` file-by-file:
+ * inodes).
+ *
+ * INVARIANT: project directories contain ONLY a `memory/` subdirectory, no
+ * sibling files. This matches the structure created by `syncCommitAndPush`
+ * (which writes only `projects/<id>/memory/*.md`). Any sibling files under
+ * the legacy source would be silently removed by the final rm — they are
+ * not merged across. If a future writer introduces sibling content, this
+ * function needs to be updated to walk the entire source tree, not just
+ * `memory/`.
+ *
+ * Walks `src/memory/` file-by-file:
  *
  * - File absent in dst → `git mv` into dst.
  * - Markdown file present in both → read both bodies, merge losslessly with
  *   `mergeMarkdownBodies`, write to dst, `git rm` src.
  * - Non-markdown file present in both → keep whichever has the newer mtime.
  *
- * After the walk, `git rm -r` the now-empty source directory.
+ * After the walk, remove the now-empty source directory tree via `fs.rm`.
  */
 async function mergeProjectDirs(
   syncRepoDir: string,

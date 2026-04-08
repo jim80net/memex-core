@@ -107,9 +107,13 @@ export async function syncPull(config: SyncConfig, syncRepoDir: string): Promise
   }
 
   if (!(await hasCommits(syncRepoDir))) {
-    // Fresh repo with a remote configured but nothing fetched yet.
-    // runSyncMigrations writes the marker so the first user commit carries it.
-    await runSyncMigrations(config, syncRepoDir);
+    // Fresh local repo with a remote configured. This can mean either
+    // (a) initSyncRepo's clone failed and fell back to `git init`, or
+    // (b) the remote is genuinely empty. In case (a) the remote's content
+    // has never been seen — writing a v2 marker locally and later rebasing
+    // it onto legacy v1 content would falsely mark that content as migrated.
+    // Defer migration until the repo has commits and we've successfully
+    // fetched the remote state.
     return "no commits yet";
   }
 

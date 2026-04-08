@@ -259,6 +259,7 @@ describe("runSyncMigrations", () => {
     await expect(
       stat(join(repoDir, "projects/GitHub.com/foo/bar/memory/notes.md")),
     ).resolves.toBeDefined();
+    expect(await readSyncRepoVersion(repoDir)).toBe(1);
   });
 
   it("writes marker and no migration commit on a fresh repo", async () => {
@@ -406,5 +407,59 @@ describe("multi-device race - runSyncMigrations via syncPull", () => {
     const bMigrationCount = (bLog.match(/migrate project IDs/g) ?? []).length;
     expect(aMigrationCount).toBe(1);
     expect(bMigrationCount).toBe(1); // only the one from A that B pulled
+  });
+
+  it("device B pulls migration commit and skips its own", async () => {
+    const config: SyncConfig = {
+      ...baseSyncConfig,
+      enabled: true,
+      repo: bareRemote,
+    };
+
+    // Both devices clone FIRST (before either has migrated).
+    // initSyncRepo inside syncPull does the clone, so we call it but
+    // ignore the migration it would trigger by setting caseSensitive=true
+    // temporarily — actually, we want A to NOT migrate yet. The cleanest
+    // way is to clone manually via the CLI before either syncPull runs.
+    await runGit(["clone", bareRemote, deviceA], tmpdir());
+    await runGit(["config", "user.email", "a@memex.local"], deviceA);
+    await runGit(["config", "user.name", "Device A"], deviceA);
+
+    await runGit(["clone", bareRemote, deviceB], tmpdir());
+    await runGit(["config", "user.email", "b@memex.local"], deviceB);
+    await runGit(["config", "user.name", "Device B"], deviceB);
+
+    // Both devices now have the legacy mixed-case content locally.
+    await expect(
+      stat(join(deviceA, "projects/GitHub.com/Jim80Net/Repo/memory/notes.md")),
+    ).resolves.toBeDefined();
+    await expect(
+      stat(join(deviceB, "projects/GitHub.com/Jim80Net/Repo/memory/notes.md")),
+    ).resolves.toBeDefined();
+
+    // Device A runs syncPull: fetch (no-op, already up-to-date) → migration runs → commit
+    const resultA = await syncPull(config, deviceA);
+    expect(resultA).toContain("pulled");
+    expect(await readSyncRepoVersion(deviceA)).toBe(2);
+
+    // A pushes its migration commit
+    await runGit(["push", "origin", "main"], deviceA);
+
+    // Device B runs syncPull: fetch brings A's migration commit → rebase/merge
+    // applies it → runSyncMigrations sees v2 marker → skips
+    const resultB = await syncPull(config, deviceB);
+    expect(resultB).toContain("pulled");
+    expect(await readSyncRepoVersion(deviceB)).toBe(2);
+
+    // B should have the lowercase tree (via A's migration commit pulled in)
+    await expect(
+      stat(join(deviceB, "projects/github.com/jim80net/repo/memory/notes.md")),
+    ).resolves.toBeDefined();
+
+    // Exactly one migration commit in each device's history
+    const { stdout: aLog2 } = await runGit(["log", "--oneline"], deviceA);
+    const { stdout: bLog2 } = await runGit(["log", "--oneline"], deviceB);
+    expect((aLog2.match(/migrate project IDs/g) ?? []).length).toBe(1);
+    expect((bLog2.match(/migrate project IDs/g) ?? []).length).toBe(1);
   });
 });
