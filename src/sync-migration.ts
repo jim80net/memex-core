@@ -168,10 +168,7 @@ async function gitRenameCaseOnly(
  * directories until we hit `projects/`. Git doesn't track empty dirs so
  * `git rm` is not needed — plain `fs.rm` on the working tree is enough.
  */
-async function removeEmptyLegacyAncestors(
-  syncRepoDir: string,
-  srcRelative: string,
-): Promise<void> {
+async function removeEmptyLegacyAncestors(syncRepoDir: string, srcRelative: string): Promise<void> {
   const projectsRoot = join(syncRepoDir, "projects");
   let current = dirname(join(syncRepoDir, srcRelative));
   while (current !== projectsRoot && current.startsWith(projectsRoot)) {
@@ -200,9 +197,7 @@ async function removeEmptyLegacyAncestors(
  * Does not commit. Callers own the commit decision. Safe to run in a clean
  * working tree — staged changes may confuse callers of `git add -A` afterward.
  */
-export async function migrateProjectIdsToLowercase(
-  syncRepoDir: string,
-): Promise<MigrationResult> {
+export async function migrateProjectIdsToLowercase(syncRepoDir: string): Promise<MigrationResult> {
   const projectsDir = join(syncRepoDir, "projects");
 
   try {
@@ -345,10 +340,7 @@ async function mergeProjectDirs(
  * devices. See `openspec/changes/lowercase-project-ids/design.md`
  * section 4.
  */
-export async function runSyncMigrations(
-  config: SyncConfig,
-  syncRepoDir: string,
-): Promise<string> {
+export async function runSyncMigrations(config: SyncConfig, syncRepoDir: string): Promise<string> {
   if (config.caseSensitive === true) {
     return "migration skipped (case-sensitive mode)";
   }

@@ -174,7 +174,10 @@ async function findLegacyMixedCaseMemoryDirs(
       if (!entry.isDirectory() || entry.name === "memory") continue;
       // Only recurse into candidates that could lowercase-match the target prefix
       const childRel = relativeDir ? `${relativeDir}/${entry.name}` : entry.name;
-      const targetPrefix = targetId.split("/").slice(0, depth + 1).join("/");
+      const targetPrefix = targetId
+        .split("/")
+        .slice(0, depth + 1)
+        .join("/");
       if (childRel.toLowerCase() === targetPrefix) {
         await walk(childRel, depth + 1);
       }

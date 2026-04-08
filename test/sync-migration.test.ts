@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { syncPull } from "../src/sync.ts";
 import {
   isMidRebaseOrMerge,
   mergeMarkdownBodies,
@@ -12,7 +13,6 @@ import {
   runSyncMigrations,
   writeSyncRepoVersion,
 } from "../src/sync-migration.ts";
-import { syncPull } from "../src/sync.ts";
 import type { SyncConfig } from "../src/types.ts";
 
 const execFileAsync = promisify(execFile);
@@ -138,9 +138,7 @@ describe("migrateProjectIdsToLowercase - case-only rename", () => {
 
     const result = await migrateProjectIdsToLowercase(repoDir);
 
-    expect(new Set(result.renamed)).toEqual(
-      new Set(["Host/OwnerA/RepoA", "Host/OwnerB/RepoB"]),
-    );
+    expect(new Set(result.renamed)).toEqual(new Set(["Host/OwnerA/RepoA", "Host/OwnerB/RepoB"]));
 
     await expect(
       stat(join(repoDir, "projects/host/ownera/repoa/memory/a.md")),
@@ -254,10 +252,7 @@ describe("runSyncMigrations", () => {
     await runGit(["add", "-A"], repoDir);
     await runGit(["commit", "-m", "seed"], repoDir);
 
-    const result = await runSyncMigrations(
-      { ...baseSyncConfig, caseSensitive: true },
-      repoDir,
-    );
+    const result = await runSyncMigrations({ ...baseSyncConfig, caseSensitive: true }, repoDir);
 
     expect(result).toContain("case-sensitive");
     // Legacy path is untouched
