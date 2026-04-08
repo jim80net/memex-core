@@ -8,7 +8,7 @@
 
 **Tech Stack:** TypeScript (ESM, NodeNext), Vitest, Node.js `node:fs/promises` + `node:child_process` git subprocess. No new runtime dependencies.
 
-**Spec:** `openspec/changes/2026-04-07-lowercase-project-ids/design.md`
+**Spec:** `openspec/changes/lowercase-project-ids/design.md`
 
 ---
 
@@ -1528,7 +1528,7 @@ Append to `src/sync-migration.ts` (after the merge path added in Task 8):
  * IMPORTANT: Callers must only invoke this after pulling the latest remote
  * state (or in a local-only repo with no remote). Running on stale local
  * state when a remote exists can cause divergent migration commits across
- * devices. See `openspec/changes/2026-04-07-lowercase-project-ids/design.md`
+ * devices. See `openspec/changes/lowercase-project-ids/design.md`
  * section 4.
  */
 export async function runSyncMigrations(
