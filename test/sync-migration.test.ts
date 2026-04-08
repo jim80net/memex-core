@@ -9,8 +9,10 @@ import {
   mergeMarkdownBodies,
   migrateProjectIdsToLowercase,
   readSyncRepoVersion,
+  runSyncMigrations,
   writeSyncRepoVersion,
 } from "../src/sync-migration.ts";
+import type { SyncConfig } from "../src/types.ts";
 
 const execFileAsync = promisify(execFile);
 const runGit = (args: string[], cwd: string) =>
@@ -234,5 +236,107 @@ describe("migrateProjectIdsToLowercase - true merge path", () => {
 
     const content = await readFile(canonicalPath, "utf-8");
     expect(content).toBe('{"v":"new"}');
+  });
+});
+
+const baseSyncConfig: SyncConfig = {
+  enabled: true,
+  repo: "",
+  autoPull: false,
+  autoCommitPush: false,
+  projectMappings: {},
+};
+
+describe("runSyncMigrations", () => {
+  it("skips when caseSensitive is true", async () => {
+    await writeTracked(repoDir, "projects/GitHub.com/foo/bar/memory/notes.md", "hi");
+    await runGit(["add", "-A"], repoDir);
+    await runGit(["commit", "-m", "seed"], repoDir);
+
+    const result = await runSyncMigrations(
+      { ...baseSyncConfig, caseSensitive: true },
+      repoDir,
+    );
+
+    expect(result).toContain("case-sensitive");
+    // Legacy path is untouched
+    await expect(
+      stat(join(repoDir, "projects/GitHub.com/foo/bar/memory/notes.md")),
+    ).resolves.toBeDefined();
+  });
+
+  it("writes marker and no migration commit on a fresh repo", async () => {
+    // Wipe the initial empty commit so hasCommits returns false
+    await rm(join(repoDir, ".git"), { recursive: true, force: true });
+    await runGit(["init", "--initial-branch=main"], repoDir);
+    await runGit(["config", "user.email", "test@memex.local"], repoDir);
+    await runGit(["config", "user.name", "Memex Test"], repoDir);
+
+    const result = await runSyncMigrations(baseSyncConfig, repoDir);
+
+    expect(result).toContain("fresh repo");
+    expect(await readSyncRepoVersion(repoDir)).toBe(2);
+  });
+
+  it("bails cleanly on mid-rebase state", async () => {
+    await mkdir(join(repoDir, ".git", "rebase-merge"), { recursive: true });
+    const result = await runSyncMigrations(baseSyncConfig, repoDir);
+    expect(result).toContain("mid-rebase");
+  });
+
+  it("skips when version is already 2", async () => {
+    await writeTracked(repoDir, "projects/GitHub.com/foo/bar/memory/notes.md", "hi");
+    await writeSyncRepoVersion(repoDir, 2);
+    await runGit(["add", "-A"], repoDir);
+    await runGit(["commit", "-m", "already v2"], repoDir);
+
+    const result = await runSyncMigrations(baseSyncConfig, repoDir);
+
+    expect(result).toContain("already v2");
+    // Legacy path untouched — migration did not run
+    await expect(
+      stat(join(repoDir, "projects/GitHub.com/foo/bar/memory/notes.md")),
+    ).resolves.toBeDefined();
+  });
+
+  it("migrates, writes marker, and commits in one operation", async () => {
+    await writeTracked(repoDir, "projects/GitHub.com/Jim80Net/Repo/memory/notes.md", "hi");
+    await runGit(["add", "-A"], repoDir);
+    await runGit(["commit", "-m", "seed legacy"], repoDir);
+
+    const headBefore = (await runGit(["rev-parse", "HEAD"], repoDir)).stdout.trim();
+
+    const result = await runSyncMigrations(baseSyncConfig, repoDir);
+
+    expect(result).toMatch(/migrated 1 dir/);
+    expect(await readSyncRepoVersion(repoDir)).toBe(2);
+
+    // Verify a new commit was created
+    const headAfter = (await runGit(["rev-parse", "HEAD"], repoDir)).stdout.trim();
+    expect(headAfter).not.toBe(headBefore);
+
+    // Verify commit message mentions migration
+    const { stdout: logOut } = await runGit(["log", "-1", "--pretty=%s"], repoDir);
+    expect(logOut).toContain("migrate project IDs to lowercase");
+
+    // Verify the lowercase tree exists
+    await expect(
+      stat(join(repoDir, "projects/github.com/jim80net/repo/memory/notes.md")),
+    ).resolves.toBeDefined();
+  });
+
+  it("is idempotent on a second run", async () => {
+    await writeTracked(repoDir, "projects/GitHub.com/Jim80Net/Repo/memory/notes.md", "hi");
+    await runGit(["add", "-A"], repoDir);
+    await runGit(["commit", "-m", "seed legacy"], repoDir);
+
+    await runSyncMigrations(baseSyncConfig, repoDir);
+    const headAfterFirst = (await runGit(["rev-parse", "HEAD"], repoDir)).stdout.trim();
+
+    const secondResult = await runSyncMigrations(baseSyncConfig, repoDir);
+    const headAfterSecond = (await runGit(["rev-parse", "HEAD"], repoDir)).stdout.trim();
+
+    expect(secondResult).toContain("already v2");
+    expect(headAfterSecond).toBe(headAfterFirst); // no new commit
   });
 });

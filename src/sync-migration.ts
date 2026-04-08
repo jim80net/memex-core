@@ -1,6 +1,7 @@
 import { mkdir, readdir, readFile, rm, rmdir, stat, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
-import { git } from "./git-helpers.js";
+import { git, hasCommits } from "./git-helpers.js";
+import type { SyncConfig } from "./types.js";
 
 // ---------------------------------------------------------------------------
 // Sync repo version marker
@@ -327,4 +328,62 @@ async function mergeProjectDirs(
   // All tracked files have been git-removed or moved; the src directory tree
   // is now empty and untracked — remove the remaining inode with plain fs.rm.
   await rm(join(syncRepoDir, srcRelative), { recursive: true, force: true });
+}
+
+// ---------------------------------------------------------------------------
+// Orchestrator
+// ---------------------------------------------------------------------------
+
+/**
+ * Run all pending sync repo migrations. Idempotent. Safe to call repeatedly
+ * from the top of `syncPull` — it becomes a no-op once the v2 marker is
+ * written.
+ *
+ * IMPORTANT: Callers must only invoke this after pulling the latest remote
+ * state (or in a local-only repo with no remote). Running on stale local
+ * state when a remote exists can cause divergent migration commits across
+ * devices. See `openspec/changes/lowercase-project-ids/design.md`
+ * section 4.
+ */
+export async function runSyncMigrations(
+  config: SyncConfig,
+  syncRepoDir: string,
+): Promise<string> {
+  if (config.caseSensitive === true) {
+    return "migration skipped (case-sensitive mode)";
+  }
+
+  if (await isMidRebaseOrMerge(syncRepoDir)) {
+    return "migration skipped (mid-rebase/merge state)";
+  }
+
+  if (!(await hasCommits(syncRepoDir))) {
+    // Fresh repo — nothing to scan. Write the marker so the first user
+    // commit carries it.
+    await writeSyncRepoVersion(syncRepoDir, 2);
+    return "marker initialized (fresh repo)";
+  }
+
+  const version = await readSyncRepoVersion(syncRepoDir);
+  if (version >= 2) {
+    return "migration skipped (already v2)";
+  }
+
+  const result = await migrateProjectIdsToLowercase(syncRepoDir);
+  await writeSyncRepoVersion(syncRepoDir, 2);
+
+  await git(["add", "-A"], syncRepoDir);
+  const { stdout } = await git(["status", "--porcelain"], syncRepoDir);
+  if (!stdout.trim()) {
+    return `migration: no changes (renamed ${result.renamed.length}, merged ${result.merged.length})`;
+  }
+
+  await git(
+    ["commit", "-m", "memex: migrate project IDs to lowercase (schema v1 → v2)"],
+    syncRepoDir,
+  );
+  process.stderr.write(
+    `memex[sync]: migrated ${result.renamed.length} project(s), merged ${result.merged.length}\n`,
+  );
+  return `migrated ${result.renamed.length} dir(s), merged ${result.merged.length}`;
 }
