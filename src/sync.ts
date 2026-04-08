@@ -2,63 +2,11 @@ import { execFile } from "node:child_process";
 import { mkdir, readdir, readFile, stat, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { promisify } from "node:util";
+import { getDefaultBranch, git, hasCommits, hasRemote, isGitRepo } from "./git-helpers.js";
 import { getSyncProjectMemoryDir } from "./project-mapping.js";
 import type { SyncConfig } from "./types.js";
 
 const execFileAsync = promisify(execFile);
-
-// ---------------------------------------------------------------------------
-// Git helpers
-// ---------------------------------------------------------------------------
-
-async function git(args: string[], cwd: string): Promise<{ stdout: string; stderr: string }> {
-  return execFileAsync("git", args, { cwd, timeout: 30_000 });
-}
-
-async function isGitRepo(dir: string): Promise<boolean> {
-  try {
-    await git(["rev-parse", "--git-dir"], dir);
-    return true;
-  } catch {
-    return false;
-  }
-}
-
-async function hasRemote(dir: string): Promise<boolean> {
-  try {
-    const { stdout } = await git(["remote"], dir);
-    return stdout.trim().length > 0;
-  } catch {
-    return false;
-  }
-}
-
-async function hasCommits(dir: string): Promise<boolean> {
-  try {
-    await git(["rev-parse", "HEAD"], dir);
-    return true;
-  } catch {
-    return false;
-  }
-}
-
-async function getDefaultBranch(dir: string): Promise<string> {
-  try {
-    const { stdout } = await git(["symbolic-ref", "refs/remotes/origin/HEAD"], dir);
-    const ref = stdout.trim();
-    const branch = ref.replace(/^refs\/remotes\/origin\//, "");
-    if (branch) return branch;
-  } catch {
-    try {
-      const { stdout } = await git(["ls-remote", "--symref", "origin", "HEAD"], dir);
-      const match = stdout.match(/ref:\s+refs\/heads\/(\S+)/);
-      if (match) return match[1];
-    } catch {
-      // Fall through to default
-    }
-  }
-  return "main";
-}
 
 // ---------------------------------------------------------------------------
 // Conflict resolution
