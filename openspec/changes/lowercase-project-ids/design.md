@@ -106,8 +106,8 @@ Pure scan + rename operation. Does not commit. Does not check the marker. Caller
    - **Case-only rename** (`src.toLowerCase() === dst.toLowerCase() && src !== dst`):
      - **Always** use the two-step pattern, regardless of filesystem:
        ```
-       git mv -k <projects/src> <projects/src>.memex-rename-tmp
-       git mv -k <projects/src>.memex-rename-tmp <projects/dst>
+       git mv <projects/src> <projects/src>.memex-rename-tmp
+       git mv <projects/src>.memex-rename-tmp <projects/dst>
        ```
      - This is the canonical git recipe for case-only renames on case-insensitive filesystems (macOS APFS, Windows NTFS), and it's safe on case-sensitive ones too.
      - Record in `renamed`.

@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+### ⚠ BREAKING CHANGES
+
+* `normalizeGitUrl` now lowercases its output by default. Library consumers
+  who depended on the previous case-preserving behavior must pass
+  `caseSensitive: true` as the second argument to restore it.
+
 ### Features
 
 * `SyncConfig.caseSensitive` optional flag (default `false`) controlling
@@ -17,9 +23,6 @@
 
 ### Bug Fixes
 
-* `normalizeGitUrl` now accepts an optional `caseSensitive` parameter and
-  lowercases its output by default. Existing call sites that need preserved
-  case behavior must pass `true` explicitly.
 * Git helper functions extracted from `src/sync.ts` into a new internal
   `src/git-helpers.ts` module (no API change).
 

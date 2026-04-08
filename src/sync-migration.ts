@@ -237,6 +237,7 @@ export async function migrateProjectIdsToLowercase(syncRepoDir: string): Promise
 
     if (isDistinctMerge) {
       await mergeProjectDirs(syncRepoDir, srcRelative, dstRelative);
+      await removeEmptyLegacyAncestors(syncRepoDir, srcRelative);
       merged.push(src);
       continue;
     }
@@ -279,6 +280,10 @@ async function mergeProjectDirs(
   const srcMemoryRel = `${srcRelative}/memory`;
   const dstMemoryRel = `${dstRelative}/memory`;
   const srcMemoryAbs = join(syncRepoDir, srcMemoryRel);
+  const dstMemoryAbs = join(syncRepoDir, dstMemoryRel);
+
+  // Ensure destination memory/ exists — git mv fails if the parent doesn't.
+  await mkdir(dstMemoryAbs, { recursive: true });
 
   let entries: import("node:fs").Dirent[];
   try {

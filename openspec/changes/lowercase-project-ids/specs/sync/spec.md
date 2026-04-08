@@ -16,11 +16,12 @@ The git subprocess helpers `git`, `isGitRepo`, `hasCommits`, `hasRemote`, and `g
 
 ### Requirement: syncPull runs migration only against post-pull state
 
-`syncPull(config, syncRepoDir)` SHALL invoke `runSyncMigrations` at exactly three positions, all of which guarantee the working tree is consistent with the latest known remote state:
+`syncPull(config, syncRepoDir)` SHALL invoke `runSyncMigrations` at exactly two positions, both of which guarantee the working tree is consistent with the latest known remote state:
 
 1. After `initSyncRepo` succeeds and `hasRemote` returns `false` (local-only repo). The function then returns `"no remote configured"`.
-2. After `initSyncRepo` succeeds, `hasRemote` returns `true`, and `hasCommits` returns `false` (fresh repo with a remote). `runSyncMigrations` writes the marker so the first user commit carries it; the function then returns `"no commits yet"`.
-3. After a successful `git fetch origin` followed by a successful rebase or merge against `origin/<default-branch>` (with conflict auto-resolution as today). Migration runs only after the pull result indicates success.
+2. After a successful `git fetch origin` followed by a successful rebase or merge against `origin/<default-branch>` (with conflict auto-resolution as today). Migration runs only after the pull result indicates success.
+
+When `hasRemote` returns `true` but `hasCommits` returns `false` (fresh local repo with a remote configured, e.g. because `initSyncRepo`'s clone fell back to `git init`), `runSyncMigrations` SHALL NOT run. Writing a v2 marker locally before the remote state has been fetched would falsely mark legacy v1 content as migrated once the local branch later rebases onto the remote tip. `syncPull` returns `"no commits yet"` and defers migration until commits exist and the remote state has been successfully pulled.
 
 `runSyncMigrations` SHALL NOT run from `initSyncRepo`, from inside the rebase/merge conflict handling, or before `git fetch`. The "fetch failed" early-return path SHALL NOT trigger migration — offline migration would create exactly the divergent-history race that this restriction prevents.
 

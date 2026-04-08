@@ -176,7 +176,7 @@ Consumers typically extend `MemexCoreConfig` with platform-specific fields (hook
 
 ## Sync
 
-The `sync` module provides Git-based cross-device sync via `syncPull` and `syncCommitPush`. Both accept a `SyncConfig` object.
+The `sync` module provides Git-based cross-device sync via `syncPull` and `syncCommitAndPush`. Both accept a `SyncConfig` object.
 
 ### Case-insensitive project IDs (default)
 
