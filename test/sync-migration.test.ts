@@ -1,5 +1,5 @@
 import { execFile } from "node:child_process";
-import { mkdir, mkdtemp, readdir, rm, stat, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readdir, readFile, rm, stat, utimes, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
@@ -145,5 +145,94 @@ describe("migrateProjectIdsToLowercase - case-only rename", () => {
     await expect(
       stat(join(repoDir, "projects/host/ownerb/repob/memory/b.md")),
     ).resolves.toBeDefined();
+  });
+});
+
+describe("migrateProjectIdsToLowercase - true merge path", () => {
+  // Skip on case-insensitive filesystems where the merge case is unreachable.
+  // Detect by trying to create both Foo/ and foo/ as siblings.
+  const isCaseSensitive = async (): Promise<boolean> => {
+    const probe = await mkdtemp(join(tmpdir(), "memex-probe-"));
+    try {
+      await mkdir(join(probe, "Foo"));
+      try {
+        await mkdir(join(probe, "foo"));
+        return true;
+      } catch {
+        return false;
+      }
+    } finally {
+      await rm(probe, { recursive: true, force: true });
+    }
+  };
+
+  it("concatenates differing markdown bodies", async () => {
+    if (!(await isCaseSensitive())) {
+      return; // unreachable on macOS APFS / Windows NTFS
+    }
+
+    await writeTracked(repoDir, "projects/Foo/memory/notes.md", "legacy body");
+    await writeTracked(repoDir, "projects/foo/memory/notes.md", "canonical body");
+    await runGit(["add", "-A"], repoDir);
+    await runGit(["commit", "-m", "seed both"], repoDir);
+
+    const result = await migrateProjectIdsToLowercase(repoDir);
+    expect(result.merged).toEqual(["Foo"]);
+    expect(result.renamed).toEqual([]);
+
+    const merged = await readFile(join(repoDir, "projects/foo/memory/notes.md"), "utf-8");
+    expect(merged).toBe("legacy body\n\ncanonical body");
+
+    // Legacy dir should be gone
+    const entries = await readdir(join(repoDir, "projects"));
+    expect(entries).not.toContain("Foo");
+  });
+
+  it("dedupes identical markdown bodies", async () => {
+    if (!(await isCaseSensitive())) return;
+
+    await writeTracked(repoDir, "projects/Foo/memory/notes.md", "same content");
+    await writeTracked(repoDir, "projects/foo/memory/notes.md", "same content");
+    await runGit(["add", "-A"], repoDir);
+    await runGit(["commit", "-m", "seed identical"], repoDir);
+
+    await migrateProjectIdsToLowercase(repoDir);
+
+    const merged = await readFile(join(repoDir, "projects/foo/memory/notes.md"), "utf-8");
+    expect(merged).toBe("same content");
+  });
+
+  it("moves files present only in legacy side", async () => {
+    if (!(await isCaseSensitive())) return;
+
+    await writeTracked(repoDir, "projects/Foo/memory/only-legacy.md", "legacy only");
+    await writeTracked(repoDir, "projects/foo/memory/only-canonical.md", "canonical only");
+    await runGit(["add", "-A"], repoDir);
+    await runGit(["commit", "-m", "seed disjoint"], repoDir);
+
+    await migrateProjectIdsToLowercase(repoDir);
+
+    const canonicalEntries = await readdir(join(repoDir, "projects/foo/memory"));
+    expect(canonicalEntries.sort()).toEqual(["only-canonical.md", "only-legacy.md"]);
+  });
+
+  it("keeps the newer file for non-markdown collisions", async () => {
+    if (!(await isCaseSensitive())) return;
+
+    await writeTracked(repoDir, "projects/Foo/memory/data.json", '{"v":"old"}');
+    await writeTracked(repoDir, "projects/foo/memory/data.json", '{"v":"new"}');
+    // Ensure canonical is newer
+    await runGit(["add", "-A"], repoDir);
+    await runGit(["commit", "-m", "seed json"], repoDir);
+    const legacyPath = join(repoDir, "projects/Foo/memory/data.json");
+    const canonicalPath = join(repoDir, "projects/foo/memory/data.json");
+    const now = Date.now() / 1000;
+    await utimes(legacyPath, now - 100, now - 100);
+    await utimes(canonicalPath, now, now);
+
+    await migrateProjectIdsToLowercase(repoDir);
+
+    const content = await readFile(canonicalPath, "utf-8");
+    expect(content).toBe('{"v":"new"}');
   });
 });

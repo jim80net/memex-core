@@ -1,4 +1,4 @@
-import { mkdir, readdir, readFile, rmdir, stat, writeFile } from "node:fs/promises";
+import { mkdir, readdir, readFile, rm, rmdir, stat, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { git } from "./git-helpers.js";
 
@@ -240,10 +240,9 @@ export async function migrateProjectIdsToLowercase(
     }
 
     if (isDistinctMerge) {
-      // True merge path — implemented in Task 8
-      throw new Error(
-        `migrateProjectIdsToLowercase: merge path not yet implemented for ${src}`,
-      );
+      await mergeProjectDirs(syncRepoDir, srcRelative, dstRelative);
+      merged.push(src);
+      continue;
     }
 
     await gitRenameCaseOnly(syncRepoDir, srcRelative, dstRelative);
@@ -252,4 +251,80 @@ export async function migrateProjectIdsToLowercase(
   }
 
   return { renamed, merged };
+}
+
+/**
+ * Merge the contents of two distinct project directories (only reachable on
+ * case-sensitive filesystems where both `Foo/` and `foo/` exist as separate
+ * inodes). Walks `src/memory/` file-by-file:
+ *
+ * - File absent in dst → `git mv` into dst.
+ * - Markdown file present in both → read both bodies, merge losslessly with
+ *   `mergeMarkdownBodies`, write to dst, `git rm` src.
+ * - Non-markdown file present in both → keep whichever has the newer mtime.
+ *
+ * After the walk, `git rm -r` the now-empty source directory.
+ */
+async function mergeProjectDirs(
+  syncRepoDir: string,
+  srcRelative: string,
+  dstRelative: string,
+): Promise<void> {
+  const srcMemoryRel = `${srcRelative}/memory`;
+  const dstMemoryRel = `${dstRelative}/memory`;
+  const srcMemoryAbs = join(syncRepoDir, srcMemoryRel);
+
+  let entries: import("node:fs").Dirent[];
+  try {
+    entries = await readdir(srcMemoryAbs, { withFileTypes: true });
+  } catch {
+    entries = [];
+  }
+
+  for (const entry of entries) {
+    if (!entry.isFile()) continue;
+
+    const srcFileRel = `${srcMemoryRel}/${entry.name}`;
+    const dstFileRel = `${dstMemoryRel}/${entry.name}`;
+    const srcFileAbs = join(syncRepoDir, srcFileRel);
+    const dstFileAbs = join(syncRepoDir, dstFileRel);
+
+    let dstExists = false;
+    try {
+      await stat(dstFileAbs);
+      dstExists = true;
+    } catch {
+      dstExists = false;
+    }
+
+    if (!dstExists) {
+      await git(["mv", srcFileRel, dstFileRel], syncRepoDir);
+      continue;
+    }
+
+    if (entry.name.endsWith(".md")) {
+      const [srcBody, dstBody] = await Promise.all([
+        readFile(srcFileAbs, "utf-8"),
+        readFile(dstFileAbs, "utf-8"),
+      ]);
+      const mergedBody = mergeMarkdownBodies(srcBody, dstBody);
+      await writeFile(dstFileAbs, mergedBody, "utf-8");
+      await git(["add", dstFileRel], syncRepoDir);
+      await git(["rm", srcFileRel], syncRepoDir);
+    } else {
+      const [srcStatRes, dstStatRes] = await Promise.all([stat(srcFileAbs), stat(dstFileAbs)]);
+      if (srcStatRes.mtimeMs > dstStatRes.mtimeMs) {
+        // src is newer — replace dst with src content
+        const content = await readFile(srcFileAbs);
+        await writeFile(dstFileAbs, content);
+        await git(["add", dstFileRel], syncRepoDir);
+      }
+      // either way, remove src
+      await git(["rm", srcFileRel], syncRepoDir);
+    }
+  }
+
+  // All tracked files have been git-removed or moved; the src directory tree
+  // is now empty and untracked — remove the remaining inode with plain fs.rm.
+  await rm(join(syncRepoDir, srcRelative), { recursive: true, force: true });
 }
