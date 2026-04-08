@@ -12,6 +12,7 @@ import {
   runSyncMigrations,
   writeSyncRepoVersion,
 } from "../src/sync-migration.ts";
+import { syncPull } from "../src/sync.ts";
 import type { SyncConfig } from "../src/types.ts";
 
 const execFileAsync = promisify(execFile);
@@ -338,5 +339,77 @@ describe("runSyncMigrations", () => {
 
     expect(secondResult).toContain("already v2");
     expect(headAfterSecond).toBe(headAfterFirst); // no new commit
+  });
+});
+
+describe("multi-device race - runSyncMigrations via syncPull", () => {
+  let bareRemote: string;
+  let deviceA: string;
+  let deviceB: string;
+
+  beforeEach(async () => {
+    bareRemote = await mkdtemp(join(tmpdir(), "memex-bare-"));
+    deviceA = await mkdtemp(join(tmpdir(), "memex-devA-"));
+    deviceB = await mkdtemp(join(tmpdir(), "memex-devB-"));
+
+    await runGit(["init", "--bare", "--initial-branch=main"], bareRemote);
+
+    // Seed the bare remote with legacy mixed-case content from a throwaway clone
+    const seeder = await mkdtemp(join(tmpdir(), "memex-seed-"));
+    // Run clone from tmpdir() so we're not spawning git inside the memex-core
+    // working tree. The dst path is absolute so cwd doesn't affect the result.
+    await runGit(["clone", bareRemote, seeder], tmpdir());
+    await runGit(["config", "user.email", "seed@memex.local"], seeder);
+    await runGit(["config", "user.name", "Seed"], seeder);
+    const seedFile = join(seeder, "projects/GitHub.com/Jim80Net/Repo/memory/notes.md");
+    await mkdir(join(seedFile, ".."), { recursive: true });
+    await writeFile(seedFile, "seeded legacy", "utf-8");
+    await runGit(["add", "-A"], seeder);
+    await runGit(["commit", "-m", "seed legacy content"], seeder);
+    await runGit(["push", "origin", "main"], seeder);
+    await rm(seeder, { recursive: true, force: true });
+  });
+
+  afterEach(async () => {
+    await rm(bareRemote, { recursive: true, force: true });
+    await rm(deviceA, { recursive: true, force: true });
+    await rm(deviceB, { recursive: true, force: true });
+  });
+
+  it("first device migrates, second device sees v2 marker and skips", async () => {
+    const config: SyncConfig = {
+      ...baseSyncConfig,
+      enabled: true,
+      repo: bareRemote,
+    };
+
+    // Device A: initial sync triggers clone + migration + push
+    const resultA = await syncPull(config, deviceA);
+    expect(resultA).toContain("pulled");
+    expect(await readSyncRepoVersion(deviceA)).toBe(2);
+
+    // Push A's migration commit to the bare remote
+    await runGit(["push", "origin", "main"], deviceA);
+
+    // Device B: initial sync clones the already-migrated tree
+    const resultB = await syncPull(config, deviceB);
+    expect(resultB).toContain("pulled");
+    expect(await readSyncRepoVersion(deviceB)).toBe(2);
+
+    // Both devices should have the lowercase tree
+    await expect(
+      stat(join(deviceA, "projects/github.com/jim80net/repo/memory/notes.md")),
+    ).resolves.toBeDefined();
+    await expect(
+      stat(join(deviceB, "projects/github.com/jim80net/repo/memory/notes.md")),
+    ).resolves.toBeDefined();
+
+    // Device B should NOT have created its own migration commit
+    const { stdout: aLog } = await runGit(["log", "--oneline"], deviceA);
+    const { stdout: bLog } = await runGit(["log", "--oneline"], deviceB);
+    const aMigrationCount = (aLog.match(/migrate project IDs/g) ?? []).length;
+    const bMigrationCount = (bLog.match(/migrate project IDs/g) ?? []).length;
+    expect(aMigrationCount).toBe(1);
+    expect(bMigrationCount).toBe(1); // only the one from A that B pulled
   });
 });
