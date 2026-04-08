@@ -1,5 +1,28 @@
 # Changelog
 
+## Unreleased
+
+### Features
+
+* `SyncConfig.caseSensitive` optional flag (default `false`) controlling
+  case handling in `resolveProjectId`. Project IDs are now lowercased by
+  default across all three resolution paths.
+* `runSyncMigrations` and `migrateProjectIdsToLowercase` exported from
+  the public API for CLI diagnostics.
+* One-shot migration of existing mixed-case sync repo contents, gated by
+  a new `.memex-sync/version.json` schema marker. Runs automatically on
+  first `syncPull` after upgrade.
+* Case-insensitive fallback in `findMatchingProjectMemoryDirs` to cover
+  the rollout window between library upgrade and first post-upgrade sync.
+
+### Bug Fixes
+
+* `normalizeGitUrl` now accepts an optional `caseSensitive` parameter and
+  lowercases its output by default. Existing call sites that need preserved
+  case behavior must pass `true` explicitly.
+* Git helper functions extracted from `src/sync.ts` into a new internal
+  `src/git-helpers.ts` module (no API change).
+
 ## [0.3.1](https://github.com/jim80net/memex-core/compare/memex-core-v0.3.0...memex-core-v0.3.1) (2026-03-17)
 
 

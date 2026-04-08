@@ -174,6 +174,36 @@ boost: 0.05
 
 Consumers typically extend `MemexCoreConfig` with platform-specific fields (hooks config, sync config, sleep schedule, etc.) and handle file loading themselves.
 
+## Sync
+
+The `sync` module provides Git-based cross-device sync via `syncPull` and `syncCommitPush`. Both accept a `SyncConfig` object.
+
+### Case-insensitive project IDs (default)
+
+Project IDs are lowercased by default across all three resolution paths
+(manual mappings, git remote URLs, and encoded `_local/` path fallbacks).
+A clone of `git@github.com:Jim80Net/Repo.git` and `git@github.com:jim80net/repo.git`
+now map to the same canonical id: `github.com/jim80net/repo`.
+
+To preserve the original case, set `caseSensitive: true` in your sync config:
+
+```typescript
+const syncConfig: SyncConfig = {
+  enabled: true,
+  repo: "git@github.com:me/memex-sync.git",
+  autoPull: true,
+  autoCommitPush: true,
+  projectMappings: {},
+  caseSensitive: true, // preserve case as-is
+};
+```
+
+On first sync after upgrading from a version that wrote mixed-case directories,
+`syncPull` will run a one-shot migration that renames legacy paths to lowercase
+and writes a `.memex-sync/version.json` marker so the scan only runs once. The
+migration is safe across devices (only runs against post-pull state), idempotent,
+and handles case-insensitive filesystems (macOS APFS, Windows NTFS) correctly.
+
 ## Development
 
 ```bash
