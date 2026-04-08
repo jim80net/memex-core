@@ -6,14 +6,14 @@
 
 - **Add `caseSensitive?: boolean`** to `SyncConfig` (default `false`). Optional, backward-compatible.
 - **Lowercase by default in `resolveProjectId`** across all three resolution paths: manual `projectMappings`, git remote URL via `normalizeGitUrl`, and the encoded `_local/` cwd fallback.
-- **`normalizeGitUrl` gains an optional `caseSensitive` parameter** (default `false`). Existing callers that need case preservation must pass `true`.
+- **BREAKING** **`normalizeGitUrl` gains an optional `caseSensitive` parameter** (default `false`). The function's return value is now lowercased by default. Library consumers who depended on the previous case-preserving behavior must pass `caseSensitive: true` explicitly. End users see no observable change because the migration heals their existing data automatically.
 - **One-shot migration** of existing sync repos: scan `projects/` for mixed-case directories, rename them to lowercase via the two-step `git mv` pattern, merge any colliding lowercase trees losslessly (markdown → concat, non-markdown → newer mtime). Gated by a new `.memex-sync/version.json` schema marker (`{ "version": 2 }`).
 - **Migration runs only inside `syncPull`**, at three positions: no-remote local-only path, no-commits fresh repo path, and after a successful rebase/merge. Never on stale pre-fetch state, so two devices upgrading concurrently cannot create divergent migration commits.
 - **Reader fallback** in `findMatchingProjectMemoryDirs`: case-insensitive probe of `projects/` so legacy mixed-case dirs remain visible during the rollout window between library upgrade and first post-upgrade `syncPull`.
 - **Internal refactor**: extract `git`, `isGitRepo`, `hasCommits`, `hasRemote`, `getDefaultBranch` from `src/sync.ts` into a new `src/git-helpers.ts` module so `sync.ts` and the new `src/sync-migration.ts` can share them without circular imports.
 - **New public API**: `runSyncMigrations`, `migrateProjectIdsToLowercase`, `readSyncRepoVersion`, `writeSyncRepoVersion`, plus the `MigrationResult` type, exported from `src/index.ts` for platform CLIs (`memex doctor`, etc.).
 
-No BREAKING changes for end users with default config — the new lowercase behavior is additive on the writer side, and the migration heals existing data automatically. Library consumers who depended on `normalizeGitUrl` returning case-preserving output must now pass `true` explicitly.
+For end users with default config, the change is non-breaking — the new lowercase behavior is additive on the writer side and the migration heals existing sync repo data automatically. The only breaking surface is direct library consumers of `normalizeGitUrl`, which is called out as **BREAKING** above.
 
 ## Capabilities
 

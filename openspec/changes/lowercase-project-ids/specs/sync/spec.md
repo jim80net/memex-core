@@ -26,8 +26,8 @@ The git subprocess helpers `git`, `isGitRepo`, `hasCommits`, `hasRemote`, and `g
 
 #### Scenario: Migration runs after a successful rebase
 
-- **WHEN** `syncPull` is called against a v1 sync repo with a reachable remote and a successful rebase
-- **THEN** `runSyncMigrations` is invoked after the rebase succeeds and the migration commit lands on the local branch
+- **WHEN** `syncPull` is called against a v1 sync repo with mixed-case `projects/GitHub.com/...` content and a reachable remote whose tip has the same content
+- **THEN** after the call returns, `HEAD` contains a commit whose message matches `"migrate project IDs to lowercase"`, the marker file at `.memex-sync/version.json` reads `{ "version": 2 }`, and the lowercase `projects/github.com/...` path exists on disk
 
 #### Scenario: Migration runs on a local-only repo
 

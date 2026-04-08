@@ -44,13 +44,13 @@
 
 #### Scenario: Encoded _local fallback lowercased by default
 
-- **WHEN** `resolveProjectId` is called with a cwd that has no `.git` and no manual mapping (default flag)
-- **THEN** the result has the form `_local/<lowercased-encoded-path>`
+- **WHEN** `resolveProjectId("/does-not-exist-memex-test/SomeDir", { ...config, projectMappings: {} })` is called against a cwd with no `.git` and no manual mapping
+- **THEN** the result is exactly `"_local/-does-not-exist-memex-test-somedir"`
 
 #### Scenario: Encoded _local fallback case preserved with opt-out
 
-- **WHEN** the same call runs with `caseSensitive: true`
-- **THEN** the encoded path segment after `_local/` preserves the original cwd casing
+- **WHEN** `resolveProjectId("/does-not-exist-memex-test/SomeDir", { ...config, projectMappings: {}, caseSensitive: true })` is called
+- **THEN** the result is exactly `"_local/-does-not-exist-memex-test-SomeDir"`
 
 ### Requirement: findMatchingProjectMemoryDirs probes for legacy mixed-case directories
 
