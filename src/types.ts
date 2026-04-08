@@ -201,6 +201,12 @@ export type SyncConfig = {
   autoPull: boolean;
   autoCommitPush: boolean;
   projectMappings: Record<string, string>; // local path → canonical project id
+  /**
+   * When true, project IDs preserve the case of git remote URLs, manual mappings,
+   * and encoded cwd paths. When false or undefined (default), project IDs are
+   * lowercased across all three resolution paths.
+   */
+  caseSensitive?: boolean;
 };
 
 // ---------------------------------------------------------------------------
