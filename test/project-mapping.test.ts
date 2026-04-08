@@ -37,4 +37,22 @@ describe("normalizeGitUrl", () => {
       "bitbucket.org/team/project",
     );
   });
+
+  it("lowercases the host and path by default", () => {
+    expect(normalizeGitUrl("git@GitHub.com:Jim80Net/Repo.git")).toBe(
+      "github.com/jim80net/repo",
+    );
+  });
+
+  it("lowercases HTTPS URLs by default", () => {
+    expect(normalizeGitUrl("https://GitHub.com/Jim80Net/Repo.git")).toBe(
+      "github.com/jim80net/repo",
+    );
+  });
+
+  it("preserves case when caseSensitive is true", () => {
+    expect(normalizeGitUrl("git@GitHub.com:Jim80Net/Repo.git", true)).toBe(
+      "GitHub.com/Jim80Net/Repo",
+    );
+  });
 });

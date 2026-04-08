@@ -11,11 +11,17 @@ const execFileAsync = promisify(execFile);
  * Normalize a git remote URL to a canonical path segment.
  * Handles SSH, HTTPS, and .git suffix variations.
  *
+ * By default the result is lowercased so that clones of the same repo with
+ * different casing (`GitHub.com:Jim80Net/Repo` vs `github.com:jim80net/repo`)
+ * collapse onto a single canonical project id. Pass `caseSensitive = true`
+ * to preserve the original case.
+ *
  * Examples:
  *   git@github.com:jim80net/repo.git → github.com/jim80net/repo
+ *   git@GitHub.com:Jim80Net/Repo.git → github.com/jim80net/repo
  *   https://github.com/jim80net/repo.git → github.com/jim80net/repo
  */
-export function normalizeGitUrl(url: string): string {
+export function normalizeGitUrl(url: string, caseSensitive = false): string {
   let normalized = url.trim();
 
   // Strip trailing .git
@@ -24,15 +30,17 @@ export function normalizeGitUrl(url: string): string {
   // SSH format: git@host:owner/repo
   const sshMatch = normalized.match(/^[\w-]+@([^:]+):(.+)$/);
   if (sshMatch) {
-    return `${sshMatch[1]}/${sshMatch[2]}`;
+    const result = `${sshMatch[1]}/${sshMatch[2]}`;
+    return caseSensitive ? result : result.toLowerCase();
   }
 
   // HTTPS format: https://host/owner/repo
   try {
     const parsed = new URL(normalized);
-    return `${parsed.host}${parsed.pathname}`.replace(/^\//, "").replace(/\/$/, "");
+    const result = `${parsed.host}${parsed.pathname}`.replace(/^\//, "").replace(/\/$/, "");
+    return caseSensitive ? result : result.toLowerCase();
   } catch {
-    return normalized;
+    return caseSensitive ? normalized : normalized.toLowerCase();
   }
 }
 
