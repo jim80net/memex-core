@@ -15,6 +15,14 @@ import {
 } from "../src/sync-migration.ts";
 import type { SyncConfig } from "../src/types.ts";
 
+// Ensure git has an author identity on CI runners (which may have no
+// global config). Applies to every git subprocess spawned from this
+// test file via the execFile-based `git` helper.
+process.env.GIT_AUTHOR_NAME ??= "Memex Test";
+process.env.GIT_AUTHOR_EMAIL ??= "test@memex.local";
+process.env.GIT_COMMITTER_NAME ??= "Memex Test";
+process.env.GIT_COMMITTER_EMAIL ??= "test@memex.local";
+
 const execFileAsync = promisify(execFile);
 const runGit = (args: string[], cwd: string) =>
   execFileAsync("git", args, { cwd, timeout: 30_000 });
