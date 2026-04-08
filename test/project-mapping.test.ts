@@ -1,5 +1,12 @@
-import { describe, expect, it } from "vitest";
-import { normalizeGitUrl } from "../src/project-mapping.ts";
+import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import {
+  findMatchingProjectMemoryDirs,
+  normalizeGitUrl,
+  resolveProjectId,
+} from "../src/project-mapping.ts";
 
 describe("normalizeGitUrl", () => {
   it("normalizes SSH git URLs", () => {
@@ -36,5 +43,110 @@ describe("normalizeGitUrl", () => {
     expect(normalizeGitUrl("deploy@bitbucket.org:team/project.git")).toBe(
       "bitbucket.org/team/project",
     );
+  });
+
+  it("lowercases the host and path by default", () => {
+    expect(normalizeGitUrl("git@GitHub.com:Jim80Net/Repo.git")).toBe("github.com/jim80net/repo");
+  });
+
+  it("lowercases HTTPS URLs by default", () => {
+    expect(normalizeGitUrl("https://GitHub.com/Jim80Net/Repo.git")).toBe(
+      "github.com/jim80net/repo",
+    );
+  });
+
+  it("preserves case when caseSensitive is true", () => {
+    expect(normalizeGitUrl("git@GitHub.com:Jim80Net/Repo.git", true)).toBe(
+      "GitHub.com/Jim80Net/Repo",
+    );
+  });
+});
+
+describe("resolveProjectId", () => {
+  const baseConfig = {
+    enabled: true,
+    repo: "",
+    autoPull: false,
+    autoCommitPush: false,
+    projectMappings: {} as Record<string, string>,
+  };
+
+  it("lowercases manual mapping values by default", async () => {
+    const config = {
+      ...baseConfig,
+      projectMappings: { "/home/me/work": "MyOrg/MyProject" },
+    };
+    expect(await resolveProjectId("/home/me/work", config)).toBe("myorg/myproject");
+  });
+
+  it("preserves case in manual mappings when caseSensitive is true", async () => {
+    const config = {
+      ...baseConfig,
+      projectMappings: { "/home/me/work": "MyOrg/MyProject" },
+      caseSensitive: true,
+    };
+    expect(await resolveProjectId("/home/me/work", config)).toBe("MyOrg/MyProject");
+  });
+
+  it("lowercases _local encoded path fallback by default", async () => {
+    // Use a guaranteed-nonexistent path so getGitRemoteUrl returns null
+    // and we fall through to the encoded-path branch deterministically.
+    const id = await resolveProjectId("/does-not-exist-memex-test/SomeDir", baseConfig);
+    expect(id).toBe("_local/-does-not-exist-memex-test-somedir");
+  });
+
+  it("preserves encoded path case when caseSensitive is true", async () => {
+    const id = await resolveProjectId("/does-not-exist-memex-test/SomeDir", {
+      ...baseConfig,
+      caseSensitive: true,
+    });
+    expect(id).toBe("_local/-does-not-exist-memex-test-SomeDir");
+  });
+});
+
+describe("findMatchingProjectMemoryDirs - rollout fallback", () => {
+  let syncRepo: string;
+
+  beforeEach(async () => {
+    syncRepo = await mkdtemp(join(tmpdir(), "memex-reader-"));
+  });
+
+  afterEach(async () => {
+    await rm(syncRepo, { recursive: true, force: true });
+  });
+
+  it("finds legacy mixed-case project dirs via case-insensitive probe", async () => {
+    // Simulate legacy state: mixed-case dir exists, lowercase canonical does not
+    const legacyMemDir = join(syncRepo, "projects", "GitHub.com", "Jim80Net", "Repo", "memory");
+    await mkdir(legacyMemDir, { recursive: true });
+    await writeFile(join(legacyMemDir, "notes.md"), "legacy", "utf-8");
+
+    // A caller whose resolveProjectId returns the lowercase canonical id
+    const config = {
+      enabled: true,
+      repo: "",
+      autoPull: false,
+      autoCommitPush: false,
+      projectMappings: { "/fake/cwd": "github.com/jim80net/repo" },
+    };
+
+    const matches = await findMatchingProjectMemoryDirs("/fake/cwd", syncRepo, config);
+    expect(matches).toContain(legacyMemDir);
+  });
+
+  it("still returns canonical path when it exists", async () => {
+    const canonicalMemDir = join(syncRepo, "projects", "github.com", "jim80net", "repo", "memory");
+    await mkdir(canonicalMemDir, { recursive: true });
+
+    const config = {
+      enabled: true,
+      repo: "",
+      autoPull: false,
+      autoCommitPush: false,
+      projectMappings: { "/fake/cwd": "github.com/jim80net/repo" },
+    };
+
+    const matches = await findMatchingProjectMemoryDirs("/fake/cwd", syncRepo, config);
+    expect(matches).toContain(canonicalMemDir);
   });
 });

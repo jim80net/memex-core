@@ -1,5 +1,5 @@
 import { execFile } from "node:child_process";
-import { stat } from "node:fs/promises";
+import { readdir, stat } from "node:fs/promises";
 import { join } from "node:path";
 import { promisify } from "node:util";
 import { encodeProjectPath } from "./path-encoder.js";
@@ -11,11 +11,17 @@ const execFileAsync = promisify(execFile);
  * Normalize a git remote URL to a canonical path segment.
  * Handles SSH, HTTPS, and .git suffix variations.
  *
+ * By default the result is lowercased so that clones of the same repo with
+ * different casing (`GitHub.com:Jim80Net/Repo` vs `github.com:jim80net/repo`)
+ * collapse onto a single canonical project id. Pass `caseSensitive = true`
+ * to preserve the original case.
+ *
  * Examples:
  *   git@github.com:jim80net/repo.git → github.com/jim80net/repo
+ *   git@GitHub.com:Jim80Net/Repo.git → github.com/jim80net/repo
  *   https://github.com/jim80net/repo.git → github.com/jim80net/repo
  */
-export function normalizeGitUrl(url: string): string {
+export function normalizeGitUrl(url: string, caseSensitive = false): string {
   let normalized = url.trim();
 
   // Strip trailing .git
@@ -24,15 +30,17 @@ export function normalizeGitUrl(url: string): string {
   // SSH format: git@host:owner/repo
   const sshMatch = normalized.match(/^[\w-]+@([^:]+):(.+)$/);
   if (sshMatch) {
-    return `${sshMatch[1]}/${sshMatch[2]}`;
+    const result = `${sshMatch[1]}/${sshMatch[2]}`;
+    return caseSensitive ? result : result.toLowerCase();
   }
 
   // HTTPS format: https://host/owner/repo
   try {
     const parsed = new URL(normalized);
-    return `${parsed.host}${parsed.pathname}`.replace(/^\//, "").replace(/\/$/, "");
+    const result = `${parsed.host}${parsed.pathname}`.replace(/^\//, "").replace(/\/$/, "");
+    return caseSensitive ? result : result.toLowerCase();
   } catch {
-    return normalized;
+    return caseSensitive ? normalized : normalized.toLowerCase();
   }
 }
 
@@ -59,26 +67,40 @@ async function getGitRemoteUrl(cwd: string): Promise<string | null> {
  * 1. Manual mapping from config (explicit override)
  * 2. Git remote URL → normalized to host/owner/repo
  * 3. Encoded cwd path → stored under _local/
+ *
+ * All three paths are lowercased by default. Set `syncConfig.caseSensitive`
+ * to `true` to preserve the original casing.
  */
 export async function resolveProjectId(cwd: string, syncConfig: SyncConfig): Promise<string> {
+  const preserveCase = syncConfig.caseSensitive === true;
+  const norm = (s: string) => (preserveCase ? s : s.toLowerCase());
+
   // 1. Manual mapping
   if (syncConfig.projectMappings[cwd]) {
-    return syncConfig.projectMappings[cwd];
+    return norm(syncConfig.projectMappings[cwd]);
   }
 
   // 2. Git remote URL
   const remoteUrl = await getGitRemoteUrl(cwd);
   if (remoteUrl) {
-    return normalizeGitUrl(remoteUrl);
+    return normalizeGitUrl(remoteUrl, preserveCase);
   }
 
   // 3. Encoded path fallback
-  return `_local/${encodeProjectPath(cwd)}`;
+  return `_local/${norm(encodeProjectPath(cwd))}`;
 }
 
 /**
  * Find all project memory directories in the sync repo that match the current cwd.
- * Multiple matches are possible (e.g., same project stored under both URL and encoded path).
+ *
+ * Returns:
+ * - The canonical (lowercase) memory dir if it exists.
+ * - The `_local/<encoded>` fallback if it exists and differs from the canonical.
+ * - Any legacy mixed-case directory whose lowercase form equals the canonical id
+ *   (rollout window before a post-upgrade sync has migrated the repo).
+ *
+ * Multiple matches are expected during the upgrade window; callers should merge
+ * their contents.
  */
 export async function findMatchingProjectMemoryDirs(
   cwd: string,
@@ -86,29 +108,84 @@ export async function findMatchingProjectMemoryDirs(
   syncConfig: SyncConfig,
 ): Promise<string[]> {
   const projectsDir = join(syncRepoPath, "projects");
-  const matches: string[] = [];
+  const matches = new Set<string>();
 
   const canonicalId = await resolveProjectId(cwd, syncConfig);
   const canonicalMemDir = join(projectsDir, canonicalId, "memory");
   try {
     await stat(canonicalMemDir);
-    matches.push(canonicalMemDir);
+    matches.add(canonicalMemDir);
   } catch {
     // doesn't exist yet
   }
 
   const encodedPath = encodeProjectPath(cwd);
   const localMemDir = join(projectsDir, "_local", encodedPath, "memory");
-  if (localMemDir !== canonicalMemDir) {
+  try {
+    await stat(localMemDir);
+    matches.add(localMemDir);
+  } catch {
+    // doesn't exist
+  }
+
+  // Rollout-window fallback: walk projects/ and collect any directory whose
+  // lowercase path (relative to projects/) equals canonicalId. This catches
+  // legacy mixed-case dirs that have not yet been migrated.
+  if (!syncConfig.caseSensitive) {
+    const legacyMatches = await findLegacyMixedCaseMemoryDirs(projectsDir, canonicalId);
+    for (const m of legacyMatches) matches.add(m);
+  }
+
+  return [...matches];
+}
+
+/**
+ * Walk projects/ collecting every memory/ parent directory whose relative
+ * path (lowercased) equals targetId. Skips the already-canonical lowercase path.
+ */
+async function findLegacyMixedCaseMemoryDirs(
+  projectsDir: string,
+  targetId: string,
+): Promise<string[]> {
+  const results: string[] = [];
+  const targetDepth = targetId.split("/").length;
+
+  async function walk(relativeDir: string, depth: number): Promise<void> {
+    if (depth > targetDepth) return;
+
+    const absDir = join(projectsDir, relativeDir);
+    let entries: import("node:fs").Dirent[];
     try {
-      await stat(localMemDir);
-      matches.push(localMemDir);
+      entries = await readdir(absDir, { withFileTypes: true });
     } catch {
-      // doesn't exist
+      return;
+    }
+
+    if (depth === targetDepth) {
+      // Leaf of the project id — check for memory/ child
+      const hasMemory = entries.some((e) => e.isDirectory() && e.name === "memory");
+      if (hasMemory && relativeDir.toLowerCase() === targetId && relativeDir !== targetId) {
+        results.push(join(absDir, "memory"));
+      }
+      return;
+    }
+
+    for (const entry of entries) {
+      if (!entry.isDirectory() || entry.name === "memory") continue;
+      // Only recurse into candidates that could lowercase-match the target prefix
+      const childRel = relativeDir ? `${relativeDir}/${entry.name}` : entry.name;
+      const targetPrefix = targetId
+        .split("/")
+        .slice(0, depth + 1)
+        .join("/");
+      if (childRel.toLowerCase() === targetPrefix) {
+        await walk(childRel, depth + 1);
+      }
     }
   }
 
-  return matches;
+  await walk("", 0);
+  return results;
 }
 
 /**

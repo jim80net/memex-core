@@ -2,63 +2,12 @@ import { execFile } from "node:child_process";
 import { mkdir, readdir, readFile, stat, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { promisify } from "node:util";
+import { getDefaultBranch, git, hasCommits, hasRemote, isGitRepo } from "./git-helpers.js";
 import { getSyncProjectMemoryDir } from "./project-mapping.js";
+import { runSyncMigrations } from "./sync-migration.js";
 import type { SyncConfig } from "./types.js";
 
 const execFileAsync = promisify(execFile);
-
-// ---------------------------------------------------------------------------
-// Git helpers
-// ---------------------------------------------------------------------------
-
-async function git(args: string[], cwd: string): Promise<{ stdout: string; stderr: string }> {
-  return execFileAsync("git", args, { cwd, timeout: 30_000 });
-}
-
-async function isGitRepo(dir: string): Promise<boolean> {
-  try {
-    await git(["rev-parse", "--git-dir"], dir);
-    return true;
-  } catch {
-    return false;
-  }
-}
-
-async function hasRemote(dir: string): Promise<boolean> {
-  try {
-    const { stdout } = await git(["remote"], dir);
-    return stdout.trim().length > 0;
-  } catch {
-    return false;
-  }
-}
-
-async function hasCommits(dir: string): Promise<boolean> {
-  try {
-    await git(["rev-parse", "HEAD"], dir);
-    return true;
-  } catch {
-    return false;
-  }
-}
-
-async function getDefaultBranch(dir: string): Promise<string> {
-  try {
-    const { stdout } = await git(["symbolic-ref", "refs/remotes/origin/HEAD"], dir);
-    const ref = stdout.trim();
-    const branch = ref.replace(/^refs\/remotes\/origin\//, "");
-    if (branch) return branch;
-  } catch {
-    try {
-      const { stdout } = await git(["ls-remote", "--symref", "origin", "HEAD"], dir);
-      const match = stdout.match(/ref:\s+refs\/heads\/(\S+)/);
-      if (match) return match[1];
-    } catch {
-      // Fall through to default
-    }
-  }
-  return "main";
-}
 
 // ---------------------------------------------------------------------------
 // Conflict resolution
@@ -151,8 +100,22 @@ export async function syncPull(config: SyncConfig, syncRepoDir: string): Promise
 
   await initSyncRepo(config, syncRepoDir);
 
-  if (!(await hasRemote(syncRepoDir))) return "no remote configured";
-  if (!(await hasCommits(syncRepoDir))) return "no commits yet";
+  if (!(await hasRemote(syncRepoDir))) {
+    // Local-only repo — migrate without remote coordination concerns.
+    await runSyncMigrations(config, syncRepoDir);
+    return "no remote configured";
+  }
+
+  if (!(await hasCommits(syncRepoDir))) {
+    // Fresh local repo with a remote configured. This can mean either
+    // (a) initSyncRepo's clone failed and fell back to `git init`, or
+    // (b) the remote is genuinely empty. In case (a) the remote's content
+    // has never been seen — writing a v2 marker locally and later rebasing
+    // it onto legacy v1 content would falsely mark that content as migrated.
+    // Defer migration until the repo has commits and we've successfully
+    // fetched the remote state.
+    return "no commits yet";
+  }
 
   try {
     await git(["fetch", "origin"], syncRepoDir);
@@ -163,6 +126,25 @@ export async function syncPull(config: SyncConfig, syncRepoDir: string): Promise
   const defaultBranch = await getDefaultBranch(syncRepoDir);
   const remoteBranch = `origin/${defaultBranch}`;
 
+  const pullResult = await pullWithConflictResolution(syncRepoDir, remoteBranch);
+  if (pullResult.startsWith("pull failed")) {
+    return pullResult;
+  }
+
+  // Migration runs only after a successful pull — never on stale local state.
+  await runSyncMigrations(config, syncRepoDir);
+  return pullResult;
+}
+
+/**
+ * Attempt rebase-first pull with fallback to merge, both with markdown
+ * conflict auto-resolution. Extracted so syncPull can cleanly run migration
+ * after any success path.
+ */
+async function pullWithConflictResolution(
+  syncRepoDir: string,
+  remoteBranch: string,
+): Promise<string> {
   try {
     await git(["rebase", remoteBranch], syncRepoDir);
     return "pulled successfully";
