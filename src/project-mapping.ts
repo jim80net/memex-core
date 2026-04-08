@@ -1,5 +1,5 @@
 import { execFile } from "node:child_process";
-import { stat } from "node:fs/promises";
+import { readdir, stat } from "node:fs/promises";
 import { join } from "node:path";
 import { promisify } from "node:util";
 import { encodeProjectPath } from "./path-encoder.js";
@@ -92,7 +92,15 @@ export async function resolveProjectId(cwd: string, syncConfig: SyncConfig): Pro
 
 /**
  * Find all project memory directories in the sync repo that match the current cwd.
- * Multiple matches are possible (e.g., same project stored under both URL and encoded path).
+ *
+ * Returns:
+ * - The canonical (lowercase) memory dir if it exists.
+ * - The `_local/<encoded>` fallback if it exists and differs from the canonical.
+ * - Any legacy mixed-case directory whose lowercase form equals the canonical id
+ *   (rollout window before a post-upgrade sync has migrated the repo).
+ *
+ * Multiple matches are expected during the upgrade window; callers should merge
+ * their contents.
  */
 export async function findMatchingProjectMemoryDirs(
   cwd: string,
@@ -100,29 +108,81 @@ export async function findMatchingProjectMemoryDirs(
   syncConfig: SyncConfig,
 ): Promise<string[]> {
   const projectsDir = join(syncRepoPath, "projects");
-  const matches: string[] = [];
+  const matches = new Set<string>();
 
   const canonicalId = await resolveProjectId(cwd, syncConfig);
   const canonicalMemDir = join(projectsDir, canonicalId, "memory");
   try {
     await stat(canonicalMemDir);
-    matches.push(canonicalMemDir);
+    matches.add(canonicalMemDir);
   } catch {
     // doesn't exist yet
   }
 
   const encodedPath = encodeProjectPath(cwd);
   const localMemDir = join(projectsDir, "_local", encodedPath, "memory");
-  if (localMemDir !== canonicalMemDir) {
+  try {
+    await stat(localMemDir);
+    matches.add(localMemDir);
+  } catch {
+    // doesn't exist
+  }
+
+  // Rollout-window fallback: walk projects/ and collect any directory whose
+  // lowercase path (relative to projects/) equals canonicalId. This catches
+  // legacy mixed-case dirs that have not yet been migrated.
+  if (!syncConfig.caseSensitive) {
+    const legacyMatches = await findLegacyMixedCaseMemoryDirs(projectsDir, canonicalId);
+    for (const m of legacyMatches) matches.add(m);
+  }
+
+  return [...matches];
+}
+
+/**
+ * Walk projects/ collecting every memory/ parent directory whose relative
+ * path (lowercased) equals targetId. Skips the already-canonical lowercase path.
+ */
+async function findLegacyMixedCaseMemoryDirs(
+  projectsDir: string,
+  targetId: string,
+): Promise<string[]> {
+  const results: string[] = [];
+  const targetDepth = targetId.split("/").length;
+
+  async function walk(relativeDir: string, depth: number): Promise<void> {
+    if (depth > targetDepth) return;
+
+    const absDir = join(projectsDir, relativeDir);
+    let entries: import("node:fs").Dirent[];
     try {
-      await stat(localMemDir);
-      matches.push(localMemDir);
+      entries = await readdir(absDir, { withFileTypes: true });
     } catch {
-      // doesn't exist
+      return;
+    }
+
+    if (depth === targetDepth) {
+      // Leaf of the project id — check for memory/ child
+      const hasMemory = entries.some((e) => e.isDirectory() && e.name === "memory");
+      if (hasMemory && relativeDir.toLowerCase() === targetId && relativeDir !== targetId) {
+        results.push(join(absDir, "memory"));
+      }
+      return;
+    }
+
+    for (const entry of entries) {
+      if (!entry.isDirectory() || entry.name === "memory") continue;
+      // Only recurse into candidates that could lowercase-match the target prefix
+      const childRel = relativeDir ? `${relativeDir}/${entry.name}` : entry.name;
+      const targetPrefix = targetId.split("/").slice(0, depth + 1).join("/");
+      if (childRel.toLowerCase() === targetPrefix) {
+        await walk(childRel, depth + 1);
+      }
     }
   }
 
-  return matches;
+  await walk("", 0);
+  return results;
 }
 
 /**

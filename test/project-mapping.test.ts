@@ -1,5 +1,8 @@
-import { describe, expect, it } from "vitest";
-import { normalizeGitUrl, resolveProjectId } from "../src/project-mapping.ts";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { findMatchingProjectMemoryDirs, normalizeGitUrl, resolveProjectId } from "../src/project-mapping.ts";
+import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 
 describe("normalizeGitUrl", () => {
   it("normalizes SSH git URLs", () => {
@@ -96,5 +99,52 @@ describe("resolveProjectId", () => {
       caseSensitive: true,
     });
     expect(id).toBe("_local/-does-not-exist-memex-test-SomeDir");
+  });
+});
+
+describe("findMatchingProjectMemoryDirs - rollout fallback", () => {
+  let syncRepo: string;
+
+  beforeEach(async () => {
+    syncRepo = await mkdtemp(join(tmpdir(), "memex-reader-"));
+  });
+
+  afterEach(async () => {
+    await rm(syncRepo, { recursive: true, force: true });
+  });
+
+  it("finds legacy mixed-case project dirs via case-insensitive probe", async () => {
+    // Simulate legacy state: mixed-case dir exists, lowercase canonical does not
+    const legacyMemDir = join(syncRepo, "projects", "GitHub.com", "Jim80Net", "Repo", "memory");
+    await mkdir(legacyMemDir, { recursive: true });
+    await writeFile(join(legacyMemDir, "notes.md"), "legacy", "utf-8");
+
+    // A caller whose resolveProjectId returns the lowercase canonical id
+    const config = {
+      enabled: true,
+      repo: "",
+      autoPull: false,
+      autoCommitPush: false,
+      projectMappings: { "/fake/cwd": "github.com/jim80net/repo" },
+    };
+
+    const matches = await findMatchingProjectMemoryDirs("/fake/cwd", syncRepo, config);
+    expect(matches).toContain(legacyMemDir);
+  });
+
+  it("still returns canonical path when it exists", async () => {
+    const canonicalMemDir = join(syncRepo, "projects", "github.com", "jim80net", "repo", "memory");
+    await mkdir(canonicalMemDir, { recursive: true });
+
+    const config = {
+      enabled: true,
+      repo: "",
+      autoPull: false,
+      autoCommitPush: false,
+      projectMappings: { "/fake/cwd": "github.com/jim80net/repo" },
+    };
+
+    const matches = await findMatchingProjectMemoryDirs("/fake/cwd", syncRepo, config);
+    expect(matches).toContain(canonicalMemDir);
   });
 });
