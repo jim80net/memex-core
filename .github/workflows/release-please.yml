@@ -3,6 +3,12 @@ name: Release Please
 on:
   push:
     branches: [main]
+  # Manual recovery path: trigger this workflow to re-run publish for the
+  # current package.json version. Useful when release-please created the
+  # git tag but the publish job failed (e.g., an upstream npm bug). See
+  # the publish job's `if` below — manual dispatch bypasses the
+  # `release_created` gate.
+  workflow_dispatch:
 
 permissions:
   contents: write
@@ -10,7 +16,9 @@ permissions:
 
 jobs:
   release-please:
-    if: github.actor != 'github-actions[bot]'
+    # Skip on manual dispatch — we don't want release-please to create
+    # another release when we're just retrying a failed publish.
+    if: github.event_name == 'push' && github.actor != 'github-actions[bot]'
     runs-on: ubuntu-latest
     outputs:
       release_created: ${{ steps.release.outputs.release_created }}
@@ -24,7 +32,13 @@ jobs:
 
   publish:
     needs: release-please
-    if: needs.release-please.outputs.release_created == 'true'
+    # Run on: (a) a push where release-please created a new release, or
+    # (b) a manual workflow_dispatch (recovery path). `always()` lets us
+    # proceed even though release-please is skipped on manual dispatch.
+    if: |
+      always() &&
+      (needs.release-please.outputs.release_created == 'true' ||
+       github.event_name == 'workflow_dispatch')
     runs-on: ubuntu-latest
     environment: npm
     permissions:
@@ -43,8 +57,16 @@ jobs:
           cache: pnpm
           registry-url: 'https://registry.npmjs.org'
 
-      - name: Upgrade npm for OIDC trusted publishing
-        run: npm install -g npm@latest
+      - name: Install a working npm (bundled npm in Node 22.22.2 is broken)
+        # Node 22.22.2 ships with an npm install that is missing the
+        # `promise-retry` dependency, so `npm install -g npm@latest` fails
+        # with MODULE_NOT_FOUND before it can upgrade itself. Use corepack
+        # to install a known-good npm version that supports OIDC trusted
+        # publishing.
+        run: |
+          corepack enable
+          corepack prepare npm@11.6.0 --activate
+          npm --version
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile --ignore-scripts
