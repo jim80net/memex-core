@@ -26,6 +26,13 @@
 * Git helper functions extracted from `src/sync.ts` into a new internal
   `src/git-helpers.ts` module (no API change).
 
+## [0.4.0](https://github.com/jim80net/memex-core/compare/memex-core-v0.3.1...memex-core-v0.4.0) (2026-04-08)
+
+
+### Features
+
+* **sync:** case-insensitive project IDs with one-shot migration ([#17](https://github.com/jim80net/memex-core/issues/17)) ([2c3f6d1](https://github.com/jim80net/memex-core/commit/2c3f6d136a56514c1d3ea7813fcf344458684599))
+
 ## [0.3.1](https://github.com/jim80net/memex-core/compare/memex-core-v0.3.0...memex-core-v0.3.1) (2026-03-17)
 
 
