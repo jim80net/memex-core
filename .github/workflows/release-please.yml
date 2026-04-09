@@ -33,10 +33,11 @@ jobs:
   publish:
     needs: release-please
     # Run on: (a) a push where release-please created a new release, or
-    # (b) a manual workflow_dispatch (recovery path). `always()` lets us
-    # proceed even though release-please is skipped on manual dispatch.
+    # (b) a manual workflow_dispatch (recovery path). `!cancelled()` lets
+    # us proceed when release-please is skipped on manual dispatch while
+    # still respecting workflow cancellation.
     if: |
-      always() &&
+      !cancelled() &&
       (needs.release-please.outputs.release_created == 'true' ||
        github.event_name == 'workflow_dispatch')
     runs-on: ubuntu-latest
