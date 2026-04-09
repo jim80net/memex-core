@@ -3,3 +3,4 @@ dist/
 *.tgz
 *.deb
 .DS_Store
+.gitnexus/
