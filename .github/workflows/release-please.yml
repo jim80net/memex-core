@@ -67,13 +67,41 @@ jobs:
         # shell sees (it prints the old version). Instead, download the
         # npm@11.6.0 tarball directly and extract it over the broken
         # bundled install. npm 11.6.0 supports OIDC trusted publishing.
+        #
+        # SECURITY: we verify the tarball against the sha512 integrity
+        # value published in the registry's package metadata before
+        # extracting it. Both requests go to registry.npmjs.org (the
+        # same origin we're about to publish to), so the trust model is
+        # unchanged, but this protects against in-transit tampering
+        # between the metadata fetch and the tarball fetch, and ensures
+        # we install the exact bytes the registry says 11.6.0 should be.
         run: |
           set -euo pipefail
+          NPM_VERSION=11.6.0
           NODE_BIN=$(which node)
           NODE_DIR=$(dirname $(dirname $NODE_BIN))
           NPM_DIR="$NODE_DIR/lib/node_modules/npm"
           TMP=$(mktemp -d)
-          curl -fsSL https://registry.npmjs.org/npm/-/npm-11.6.0.tgz -o "$TMP/npm.tgz"
+
+          EXPECTED_INTEGRITY=$(
+            curl -fsSL "https://registry.npmjs.org/npm/$NPM_VERSION" \
+            | python3 -c "import json, sys; print(json.load(sys.stdin)['dist']['integrity'])"
+          )
+          if [[ "$EXPECTED_INTEGRITY" != sha512-* ]]; then
+            echo "unexpected integrity format from registry: $EXPECTED_INTEGRITY" >&2
+            exit 1
+          fi
+
+          curl -fsSL "https://registry.npmjs.org/npm/-/npm-$NPM_VERSION.tgz" -o "$TMP/npm.tgz"
+
+          ACTUAL_INTEGRITY="sha512-$(openssl dgst -sha512 -binary "$TMP/npm.tgz" | base64 -w0)"
+          if [ "$ACTUAL_INTEGRITY" != "$EXPECTED_INTEGRITY" ]; then
+            echo "npm tarball integrity check failed" >&2
+            echo "  expected: $EXPECTED_INTEGRITY" >&2
+            echo "  actual:   $ACTUAL_INTEGRITY" >&2
+            exit 1
+          fi
+
           tar -xzf "$TMP/npm.tgz" -C "$TMP"
           sudo rm -rf "$NPM_DIR"
           sudo mv "$TMP/package" "$NPM_DIR"
