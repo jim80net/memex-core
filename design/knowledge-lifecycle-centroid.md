@@ -7,7 +7,59 @@ de facto centroid for memory / skill / rule management."*
 (primary) + the adapter repos (memex-claude/hermes/grok/openclaw thin out).
 **Author:** memex flotilla XO · grounded in the audit on #20.
 
-## 1. Problem (from the audit)
+## 0. Review-trio verdict + the GATING decision (rev2 — read first)
+
+systems-review + open-code-review + STORM on rev1. Verdict: **the mechanism/judgment
+cut is the right architecture (credited)**, but the build is **gated on one operator
+decision**, and the trio surfaced a sharper, cheaper sequencing.
+
+**🔴 GATING OPERATOR DECISION — the corpus AUDIENCE MODEL `[awaiting-auth]`.**
+`ingestAllStanding()` would push the operator's **private operating doctrine**
+(the `CLAUDE.md` 4-Cs constitution + the 23 standing rules — some naming account
+behavior, deployment habits, painful-memory retrospectives) into the shared
+corpus `claude-skill-router-corpus`. That repo is **PRIVATE today (verified
+isPrivate:true)**, so it is *not* a live leak — but the whole point of the
+centroid is cross-adapter/host sharing, and the fleet has a `take-repo-public`
+path. So **whether the constitution is corpus-eligible depends on the corpus's
+audience model**: single-operator-private-forever vs eventually shared / federated
+/ public. This is a privacy + positioning call only the operator can make, and it
+gates what `ingestAllStanding` may include. **Surfaced; build holds on it.**
+
+**Scoping insight (strong, from STORM + the Skeptic):** the #18/#20 portability
+win is *content reaching the corpus*, which a **one-time, audience-gated backfill**
+achieves — ~100% of the portability win for ~10% of the build. The recurring
+`lifecycle.ts` centroid is the larger bet, and ~70% of `/sleep`'s value is LLM
+**judgment** that each harness still hand-authors (adapters inherit the *writing*,
+not the *deciding* — rev1's "inherit for free" was half-true). **Recommendation:
+do the cheap backfill first (once the audience model is decided), then evaluate
+the full centroid** — don't freeze a claude-shaped, privacy-unscoped lifecycle
+into the neutral substrate before the two unknowns (audience model; other-harness
+injection models) are answered.
+
+**Key correction (storage ≠ injection):** corpus membership is *back-of-context*
+(semantically searched), NOT *always-loaded*. This dissolves the completeness-vs-
+curation tension (store all 23, surface only the relevant via search) and scopes
+the privacy question (it's about *what is stored in a shareable repo*, not about
+front-loading). It also reframes promote/demote (§6).
+
+**Other trio fixes (recorded here; to integrate into §2–§6 on the post-decision pass):**
+(a) semantic dedup is NOT deterministic (it's
+embedding-similarity ≥80%) → moves to the judgment/adapter side; core offers a
+`findSimilar()` *query* only (§2/§3). (b) The centroid would be a **4th
+uncoordinated writer to the sync git tree** — exactly memex-hermes **#15** (OPEN);
+core's `withFileLock` is per-*file*, not a tree lock → #15's repo-scoped lock is a
+**prerequisite** (§5). (c) The **trigger** (manual vs automatic) is ratified, not
+deferred: core = idempotent batch *capability*; adapter chooses the trigger;
+default an explicit lifecycle event (§6). (d) Folding the formatter into core is a
+**relocation** (`safeYamlScalar`/`formatMemoryEntry` live in memex-hermes today;
+core would own them and hermes re-imports) and must **own both read+write sides —
+closing #10** (embedded `"`/`\` round-trip) — or be gated on #10; re-point the #4
+conformance test. (e) `reviewLifecycle` is pure over **(telemetry × index)** (type
+lives in the index, not telemetry); thresholds are **config policy**, not magic
+numbers. (f) `ingestRule` can't reuse the **directory-shaped** `syncCommitAndPush`
+— it needs an entry-shaped sync primitive (§3).
+
+## 1. Problem (from the audit; counts as-of the #20 audit, 2026-06-30)
 
 Knowledge-lifecycle management — **ingesting** the operator's standing sources
 (`CLAUDE.md`, `~/.claude/rules/*`, `MEMORY.md`) into the shared corpus, and
