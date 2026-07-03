@@ -106,7 +106,29 @@ Every Codex hook event has its own `*HookSpecificOutputWire` with the same nesti
 1. **§4.5 / §9:** `transcript_path` is **present** on Stop (and other events) — path is the rollout JSONL file. Phase 4 may use Stop stdin `transcript_path` **or** `codexstore` (both valid; prefer documenting dual path).
 2. **§4.2:** `project_doc_max_bytes` default **32 KiB** — AGENTS.md here is 4.2 KiB; cap not hit (still not a measured config default on host).
 3. **§4.1 / hook wire:** Codex requires per-event `hookSpecificOutput` wrapper (`hookEventName` + event fields, `additionalProperties: false`). UserPromptSubmit: `{"hookSpecificOutput":{"hookEventName":"UserPromptSubmit","additionalContext":"<string>"}}`. Bare top-level `additionalContext` fails validation. memex-on-codex **stays on hook-based injection** — no pivot.
-4. **Phase 1c:** Still pending plugin-bundled hooks + interactive `/hooks` trust (not exercised).
+4. **Phase 1c:** In progress — plugin install path validated; hook runtime fix landed in memex-codex `bin/memex` (see below).
+
+## Phase 1c — plugin-bundled hooks (in progress, 2026-07-03)
+
+**Setup (verified):**
+- Local marketplace: `memex-codex/.agents/plugins/marketplace.json` + `plugins/memex-codex` → repo root
+- `codex plugin marketplace add <memex-codex-repo>`
+- `codex plugin add memex-codex@memex-codex-local` → cache `~/.codex/plugins/cache/memex-codex-local/memex-codex/0.1.0`
+- User + project hook layers disabled (`hooks.json` → `*.disabled-phase1c`)
+
+**First live exec (FAIL — root-caused):**
+
+| Probe | Result |
+|-------|--------|
+| Plugin hooks invoked | **Yes** — `hook: SessionStart`, `UserPromptSubmit`, `Stop` lines present |
+| Hook status | **Failed** on all three events |
+| Direct `bin/memex` in cache | `Cannot find module .../node_modules/tsx/dist/cli.mjs` — plugin snapshot had no `node_modules` |
+
+**Root cause:** Codex plugin install copies source but does not run `pnpm install`. `bin/memex` tsx fallback requires `node_modules/.bin/tsx`.
+
+**Fix (memex-codex `bin/memex`):** auto-run `pnpm install --frozen-lockfile` when tsx missing (≈450ms on host). Re-test pending after plugin reinstall + `scripts/spike/run-phase-1c.sh`.
+
+**Interactive `/hooks` trust:** not exercised this pass (automation used `--dangerously-bypass-hook-trust`).
 
 ## Operator / automation notes
 
