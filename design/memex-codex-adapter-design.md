@@ -1,6 +1,6 @@
 # memex-codex — Adapter Design
 
-**Status:** **APPROVED v1.2** (COS final gate 2026-07-02) — Phase 0 complete; **Phase 1a/1b complete** (live spike PR #27); **Phase 1c pending** (plugin-bundled hooks)
+**Status:** **APPROVED v1.2** (COS final gate 2026-07-02) — Phase 0 complete; **Phase 1 complete** (1a/1b live spike PR #27; **1c PASS** plugin-bundled hooks, memex-core PR #30 + memex-codex PR #5)
 **Date:** 2026-07-02
 **Author:** codex-memex-dev desk
 **Related:** `@jim80net/memex-core`, `memex-claude`, `memex-openclaw`, `memex-hermes`, `codex-harness-dev`
@@ -393,7 +393,7 @@ Unrelated to `autoMemoryMode: "takeover"` (§2.1). v1: ignore `memories_1.sqlite
 | Phase | Deliverable | Gate |
 |-------|-------------|------|
 | **0** | Design v1.2 + COS final gate | Dual reviewer clean |
-| **1** | Spike: **UserPromptSubmit** `hookSpecificOutput` injection **visible in model turn** (1a/1b **done**); capture stdin JSON per event (**done**); **1c pending:** plugin-bundled hooks via `codex plugin add` | Field names + injection proof |
+| **1** | Spike: **UserPromptSubmit** `hookSpecificOutput` injection **visible in model turn** (1a/1b **done**); capture stdin JSON per event (**done**); **1c PASS:** plugin-bundled hooks via `codex plugin add` (SessionStart/UserPromptSubmit/Stop **Completed**) | Field names + injection proof |
 | **2** | `memex-codex` scaffold + handler port | CI green |
 | **3** | Tier 1+2 conformance (fixtures @ `edf1bf6`, replicated `formatMemoryEntry`, #10/#12 pins) | vitest green |
 | **4** | Session-end learnings design (rollout JSONL via `codexstore`; Stop payload; SQLite fallback) | Design spike |
@@ -417,7 +417,7 @@ Unrelated to `autoMemoryMode: "takeover"` (§2.1). v1: ignore `memories_1.sqlite
 ## 11. Verification
 
 - Tier 1+2 vitest (no Tier 3 v1)
-- Phase 1: `hookSpecificOutput` injection visible in model (1b done); plugin-bundled hooks (1c pending)
+- Phase 1: `hookSpecificOutput` injection visible in model (1b done); plugin-bundled hooks (**1c PASS**)
 - Cross-harness: memory written in Claude sync repo → readable in Codex index
 
 ## 12. References
