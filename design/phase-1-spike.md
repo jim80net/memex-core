@@ -65,6 +65,9 @@ Repeat injection proof with plugin-bundled hooks only.
 
 ## Teardown
 
+**After Phase 1c** (plugin-bundled hooks proven via `codex plugin add`): remove or disable the dev spike project hooks so only the plugin path runs — the committed `.codex/hooks.json` in this worktree is dev convenience, not the ship path.
+
 ```bash
-mv .codex/hooks.json .codex/hooks.json.disabled
+rm .codex/hooks.json
+# or: mv .codex/hooks.json .codex/hooks.json.disabled
 ```
