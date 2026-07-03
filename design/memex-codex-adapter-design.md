@@ -1,6 +1,6 @@
 # memex-codex — Adapter Design
 
-**Status:** **APPROVED v1.2** (COS final gate 2026-07-02) — Phase 0 complete; **Phase 1 in progress**
+**Status:** **APPROVED v1.2** (COS final gate 2026-07-02) — Phase 0 complete; **Phase 1a/1b complete** (live spike PR #27); **Phase 1c pending** (plugin-bundled hooks)
 **Date:** 2026-07-02
 **Author:** codex-memex-dev desk
 **Related:** `@jim80net/memex-core`, `memex-claude`, `memex-openclaw`, `memex-hermes`, `codex-harness-dev`
@@ -17,12 +17,12 @@
 | 1a-P3c | Tier-2 pin policy ambiguous | **Fixed** — range vs resolved split | §5.3 |
 | 1a-P3d | Stop default unstated | **Fixed** — `hooks.Stop.enabled: false` v1 | §6.2 |
 | 1b-P1 | Memory write path unspecified | **Fixed** — **Option A** chosen; Tier 3 removed; write path §5.6 | §5.3, §5.6 |
-| 1b-P2-1 | `transcript_path` unlikely on Stop | **Fixed** — absent by design; Phase 4 uses rollout JSONL (`codexstore`) | §4.5, §6.2, §9 |
+| 1b-P2-1 | `transcript_path` unlikely on Stop | **Revised (Phase 1 live)** — **present** on SessionStart, UserPromptSubmit, PreToolUse, Stop; Phase 4 may use stdin path **or** `codexstore` | §4.5, §6.2, §9 |
 | 1b-P2-2 | `projectsDir` ambiguity | **Fixed** — same as 1a-P2-1; `~/.codex/memex/projects/` | §6.1 |
 | 1b-P2-3 | Conformance template split | **Fixed** — claude vs hermes roles; §5.4 vendoring required; §5.5 blocking | §3, §5 |
 | 1b-P3a | Trust bypass spelling | **Fixed** — CLI flag + config key both documented | §4.1 |
 | 1b-P3b | `plugin_hooks` removed flag | **Fixed** — graduated feature; Phase 1 tests plugin-bundled hooks | §4.6, §9 |
-| 1b-P3c | Phase 1 must verify injection | **Fixed** — UserPromptSubmit + `additionalContext` in model | §9 |
+| 1b-P3c | Phase 1 must verify injection | **Verified (Phase 1b)** — `hookSpecificOutput` wrapper + `additionalContext` visible in model turn | §4.1, §9 |
 | 1b-P3d | AGENTS.md 32 KiB unverified | **Fixed** — softened to documented default | §4.2 |
 | xdesk | Session store dual layout | **Updated** — rollout JSONL canonical turn log + SQLite index; reuse flotilla `codexstore` (PR #259) | §4.5, §8 |
 | trio | §4.7 rules scope overstated | **Fixed** — defense-in-depth backstop only; not wholesale merge/push forbid (PR #259 fix round) | §4.7 |
@@ -75,7 +75,7 @@ memex-codex ports **claude's hook architecture** and satisfies **hermes's on-dis
 | Concern | Implementation |
 |---------|----------------|
 | **Injection** | Plugin `hooks.json` → command hook `bin/memex` |
-| **I/O** | JSON stdin `HookInput` → JSON stdout `HookOutput` (`additionalContext`) |
+| **I/O** | JSON stdin `HookInput` → JSON stdout `HookOutput` (handlers use `additionalContext`; **Codex wire** wraps in `hookSpecificOutput` + `hookEventName` — §4.1) |
 | **Events** | `SessionStart`, `UserPromptSubmit`, `PreToolUse`, `Stop` |
 | **Write path** | Agent hand-writes `.md` files (takeover mode injects `memory-creation` **rule** via `session-start.ts:62-98`; no binary writer) |
 | **Sync repo** | `~/.local/share/memex-claude/` |
@@ -104,7 +104,20 @@ Codex hook system is **Claude-isomorphic** (binary-verified §4.8). Implement as
 | Project | `<repo>/.codex/hooks.json` |
 | **Plugin-bundled** | `hooks.json` in installed plugin dir (manifest key confirmed); command path uses `${PLUGIN_ROOT}` (binary-verified; `CLAUDE_PLUGIN_ROOT` alias also present) |
 
-**Per-event output wire** (binary-verified): each hooked event has a `*HookSpecificOutputWire` schema; context injection uses `AdditionalContextEntry` / `additionalContext` array — same semantics as memex-claude's `HookOutput.additionalContext` string (adapter emits the JSON shape Codex expects; spike confirms exact wire in Phase 1).
+**Per-event output wire** (binary-verified + **Phase 1b live-confirmed**): each hooked event has a `*HookSpecificOutputWire` schema with `additionalProperties: false` on the top-level `HookOutput`. Context injection requires the **`hookSpecificOutput` wrapper** — bare top-level `additionalContext` fails schema validation and Codex reports hook **Failed**.
+
+**Required stdout shape (UserPromptSubmit example):**
+
+```json
+{
+  "hookSpecificOutput": {
+    "hookEventName": "UserPromptSubmit",
+    "additionalContext": "…"
+  }
+}
+```
+
+Handlers may return memex-claude-shaped `{ additionalContext }` internally; `memex-codex` `main` encodes the Codex wire on stdout (see `src/core/codex-hook-wire.ts`). Same nesting pattern applies to every hooked event that emits context.
 
 **Trust gate** (binary-verified): non-managed hooks require `/hooks` review (`HookTrustStatus`, `trusted_hash`). Two bypass paths exist — document both, default to neither for operator installs:
 
@@ -136,7 +149,7 @@ Codex loads `AGENTS.md` / `AGENTS.override.md` from `~/.codex/` + repo walk. Doc
 - `[features] memories` — experimental; off by default
 - `codex features list` shows `plugin_hooks` as **removed** = graduated into stable `plugins` + bundled `hooks.json` — **not** absent
 
-### 4.5 Session persistence — dual store, no Stop `transcript_path`
+### 4.5 Session persistence — dual store; `transcript_path` present on hook stdin
 
 **Cross-desk ground truth** (codex-harness-dev, codex-cli 0.142.5, PR #259 `internal/codexstore/`):
 
@@ -151,7 +164,7 @@ Rollout resolution: first `session_meta` line carries `payload.cwd`; match desk 
 - `{"type":"event_msg","payload":{"type":"agent_message","message":"..."}}`
 - `{"type":"response_item","payload":{"type":"message","role":"assistant","content":[{"type":"output_text","text":"..."}]}}`
 
-**Stop-hook stdin:** `transcript_path` is still **expected absent** (Claude-isomorphic hook wire, not rollout path). Phase 1 captures Stop payload fields to confirm. Phase 4 learnings/behavioral rules read rollout JSONL (preferred) or SQLite — **reuse flotilla `codexstore.LatestResult` / `ReplyAfter`**, do not duplicate rollout parsing (§8).
+**Hook stdin `transcript_path` (Phase 1a live-confirmed):** present on SessionStart, UserPromptSubmit, PreToolUse, and Stop — points to `~/.codex/sessions/YYYY/MM/DD/rollout-<timestamp>-<uuid>.jsonl` (same artifact as §4.5 table). Phase 4 learnings/behavioral rules may read rollout JSONL via stdin `transcript_path`, via `codexstore.LatestResult(CODEX_HOME, cwd)`, or Stop payload fields — **reuse flotilla `codexstore`**, do not duplicate rollout parsing (§8).
 
 | memex-claude Stop feature | Codex v1 |
 |---------------------------|----------|
@@ -368,7 +381,8 @@ Unrelated to `autoMemoryMode: "takeover"` (§2.1). v1: ignore `memories_1.sqlite
 - Hook layers **merge** — user `~/.codex/hooks.json` + project `<repo>/.codex/hooks.json` + plugin-bundled all run (binary-verified §4.1).
 - Trust strings match harness: `"Hooks need review"` + Press enter (binary-sourced; live capture pending auth).
 - `UserPromptSubmit` pipe-capture stdin keys: `cwd`, `hook_event_name`, `prompt`, `session_id` — live session may add fields (Phase 1a).
-- `additionalContext` wire confirmed: pipe smoke emits `{"additionalContext":"memex-spike: injection marker 7f3a"}` (Phase 1b pending model turn).
+- `hookSpecificOutput` wire confirmed (Phase 1b PASS): bare `{"additionalContext":"…"}` → hook **Failed**; wrapped shape → model-visible injection. See `design/phase-1-spike.md`.
+- `transcript_path` present on all captured events (Phase 1a); points to rollout JSONL under `~/.codex/sessions/`.
 - `projectsDir` = `~/.codex/memex/projects/` (memex-owned; not Codex-native projects tree).
 - Stop hook default **`enabled: false`** — fleet `install.sh` must opt in for cross-harness write sync (§6.2).
 - v1 hooks: `SessionStart`, `UserPromptSubmit`, `PreToolUse`, `Stop` only; `PostToolUse`+ deferred.
@@ -379,7 +393,7 @@ Unrelated to `autoMemoryMode: "takeover"` (§2.1). v1: ignore `memories_1.sqlite
 | Phase | Deliverable | Gate |
 |-------|-------------|------|
 | **0** | Design v1.2 + COS final gate | Dual reviewer clean |
-| **1** | Spike: **plugin-installed** hooks fire; **UserPromptSubmit** returns `additionalContext` **visible in model turn**; capture stdin JSON per event; confirm no `transcript_path` on Stop | Field names + injection proof |
+| **1** | Spike: **UserPromptSubmit** `hookSpecificOutput` injection **visible in model turn** (1a/1b **done**); capture stdin JSON per event (**done**); **1c pending:** plugin-bundled hooks via `codex plugin add` | Field names + injection proof |
 | **2** | `memex-codex` scaffold + handler port | CI green |
 | **3** | Tier 1+2 conformance (fixtures @ `edf1bf6`, replicated `formatMemoryEntry`, #10/#12 pins) | vitest green |
 | **4** | Session-end learnings design (rollout JSONL via `codexstore`; Stop payload; SQLite fallback) | Design spike |
@@ -396,14 +410,14 @@ Unrelated to `autoMemoryMode: "takeover"` (§2.1). v1: ignore `memories_1.sqlite
 | Risk | Mitigation |
 |------|------------|
 | Agent writes malformatted memory files | `memory-creation` skill + Tier 1 format tests |
-| No Stop `transcript_path` | Phase 4 rollout JSONL via flotilla `codexstore` |
+| Rollout path resolution | Phase 4: stdin `transcript_path`, `codexstore.LatestResult`, or Stop payload — prefer shared `codexstore` |
 | Hook trust friction | `/hooks` + install docs |
 | #10 grammar fix lands in hermes | Flip boundary pin in lockstep |
 
 ## 11. Verification
 
 - Tier 1+2 vitest (no Tier 3 v1)
-- Phase 1: plugin hooks + `additionalContext` in model
+- Phase 1: `hookSpecificOutput` injection visible in model (1b done); plugin-bundled hooks (1c pending)
 - Cross-harness: memory written in Claude sync repo → readable in Codex index
 
 ## 12. References
