@@ -289,7 +289,7 @@ Codex CLI → plugin hooks.json → bin/memex → memex-core
 | `~/.codex/cache/memex-projects.json` | `registryPath` | Project registry |
 | `~/.codex/cache/memex-traces/` | `tracesDir` | Traces |
 | `~/.local/share/memex-codex/` | `syncRepoDir` | Git sync |
-| `~/.codex/memex/projects/<encoded>/memory/` | `projectsDir` | **Local** project memory (agent writes here) |
+| `~/.codex/memex/projects/` | `projectsDir` | **Local** project memory base (`getProjectMemoryDir` → `<encoded>/memory/`) |
 | `~/.codex/skills/` | `globalSkillsDir` | Indexed |
 | `""` | `globalRulesDir` | **Placeholder** — unused; rules via `type: rule` in skillDirs |
 | Sync `projects/<encoded>/memory/` | — | Cross-harness corpus |

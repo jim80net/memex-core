@@ -45,8 +45,12 @@ for e in "${!events[@]}"; do
   printf '  %s: %d\n' "${e}" "${events[$e]}"
 done
 
-if [[ ${stop_has_transcript} -eq 0 ]]; then
-  printf '\nStop events: no transcript_path observed (matches design assumption).\n'
+if [[ ${events[Stop]:-0} -gt 0 ]]; then
+  if [[ ${stop_has_transcript} -eq 0 ]]; then
+    printf '\nStop events: no transcript_path observed (matches design assumption).\n'
+  fi
+else
+  printf '\nStop events: not exercised (no Stop captures — Stop hook enabled:false by default).\n'
 fi
 
 printf '\nLatest capture:\n'
