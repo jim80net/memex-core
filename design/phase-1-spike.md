@@ -106,34 +106,51 @@ Every Codex hook event has its own `*HookSpecificOutputWire` with the same nesti
 1. **§4.5 / §9:** `transcript_path` is **present** on Stop (and other events) — path is the rollout JSONL file. Phase 4 may use Stop stdin `transcript_path` **or** `codexstore` (both valid; prefer documenting dual path).
 2. **§4.2:** `project_doc_max_bytes` default **32 KiB** — AGENTS.md here is 4.2 KiB; cap not hit (still not a measured config default on host).
 3. **§4.1 / hook wire:** Codex requires per-event `hookSpecificOutput` wrapper (`hookEventName` + event fields, `additionalProperties: false`). UserPromptSubmit: `{"hookSpecificOutput":{"hookEventName":"UserPromptSubmit","additionalContext":"<string>"}}`. Bare top-level `additionalContext` fails validation. memex-on-codex **stays on hook-based injection** — no pivot.
-4. **Phase 1c:** In progress — plugin install path validated; hook runtime fix landed in memex-codex `bin/memex` (see below).
+4. **Phase 1c:** **PASS** — plugin-bundled hooks fire and complete without user/project hook layers (see below).
 
-## Phase 1c — plugin-bundled hooks (in progress, 2026-07-03)
+## Phase 1c — plugin-bundled hooks (PASS, 2026-07-03)
+
+Captures: `~/.codex/spike-captures/phase-1c/`
 
 **Setup (verified):**
 - Local marketplace: `memex-codex/.agents/plugins/marketplace.json` + `plugins/memex-codex` → repo root
 - `codex plugin marketplace add <memex-codex-repo>`
 - `codex plugin add memex-codex@memex-codex-local` → cache `~/.codex/plugins/cache/memex-codex-local/memex-codex/0.1.0`
 - User + project hook layers disabled (`hooks.json` → `*.disabled-phase1c`)
+- Harness: `scripts/spike/run-phase-1c.sh`
 
-**First live exec (FAIL — root-caused):**
+### First live exec (FAIL — root-caused)
 
 | Probe | Result |
 |-------|--------|
 | Plugin hooks invoked | **Yes** — `hook: SessionStart`, `UserPromptSubmit`, `Stop` lines present |
 | Hook status | **Failed** on all three events |
-| Direct `bin/memex` in cache | `Cannot find module .../node_modules/tsx/dist/cli.mjs` — plugin snapshot had no `node_modules` |
+| Direct `bin/memex` in cache | `Cannot find module .../node_modules/tsx/dist/cli.mjs` |
 
-**Root cause:** Codex plugin install copies source but does not run `pnpm install`. `bin/memex` tsx fallback requires `node_modules/.bin/tsx`.
+**Root cause:** Codex plugin install copies source without `pnpm install`. Worse: it may copy a **broken** `node_modules/.bin/tsx` shim (executable wrapper with no real `tsx` package), so a naive `-x` check passes but execution fails.
 
-**Fix (memex-codex `bin/memex`):** auto-run `pnpm install --frozen-lockfile` when tsx missing (≈450ms on host). Re-test pending after plugin reinstall + `scripts/spike/run-phase-1c.sh`.
+**Fix (memex-codex `bin/memex`, PR #5):** probe `tsx --version`; on failure wipe `node_modules` and run `pnpm install --frozen-lockfile` (~450–1300ms on host).
+
+### Re-run after fix (PASS)
+
+**Passing session:** `019f2650-c895-73d2-b0e8-1cb096d6e9ed` (capture `exec-20260703T045056Z.log`).
+
+| Probe | Result |
+|-------|--------|
+| Hook source | **Plugin only** — user + project `hooks.json` disabled |
+| `hook: SessionStart` | **Completed** |
+| `hook: UserPromptSubmit` | **Completed** |
+| `hook: Stop` | **Completed** |
+| Model reply | `phase-1c-probe` (exact probe string) |
+
+**Verdict:** Phase 1c **PASS**. Plugin-bundled `${PLUGIN_ROOT}/bin/memex` hooks run end-to-end on Codex 0.142.5 without user-level or project-level hook files.
 
 **Interactive `/hooks` trust:** not exercised this pass (automation used `--dangerously-bypass-hook-trust`).
 
 ## Operator / automation notes
 
 - `codex exec` automation used **user-level** `~/.codex/hooks.json` only (project `.codex/hooks.json` disabled for pass run) — **one hook source**, no concurrent handlers.
-- Project `.codex/hooks.json` alone did not fire in `codex exec` without user-level hooks in this environment (trust + bypass insufficient); Phase 1c will validate plugin-bundled path.
+- Project `.codex/hooks.json` alone did not fire in `codex exec` without user-level hooks in this environment (trust + bypass insufficient). **Phase 1c PASS** confirms plugin-bundled hooks work without either layer.
 
 ## Teardown (unchanged)
 
