@@ -20,11 +20,25 @@ Implemented in `src/hooks/stop.ts` + `src/core/codex-hook-input.ts`.
 
 When `hooks.Stop.extractLearnings: true` (default in config template; Stop hook itself defaults `enabled: false`):
 
-1. Resolve rollout path: `transcript_path` ?? `resolveRolloutPath(codexHome, cwd)`
+1. Resolve rollout path via **`resolveTranscriptPath(codexHome, cwd, transcript_path)`** — returns `transcript_path` when present, else delegates to `resolveRolloutPath(codexHome, cwd)` (codexstore cwd lookup)
 2. `listUserMessages(rollout)` — event_msg `user_message` lines, min 10 chars (deep-sleep parity)
-3. Enqueue `PendingLearningSession` in `~/.codex/cache/memex-learnings-queue.json` (max 50, dedupe by `session_id`)
+3. Enqueue `PendingLearningSession` in `~/.codex/cache/memex-learnings-queue.json` via `enqueuePendingSession` (see concurrent-write safety below)
 
 **No LLM in the Stop hook.** Queue is consumed by Phase 5 bundled `reflect` / `deep-sleep` skills (agent reads queue + rollout, writes `session-learning` entries per Option A).
+
+## Queue concurrent-write safety (shipped in #7)
+
+`enqueuePendingSession` (`src/core/learnings-queue.ts`) serializes all queue mutations:
+
+| Mechanism | Behavior |
+|-----------|----------|
+| **`withFileLock(path)`** | memex-core file lock on `memex-learnings-queue.json` — concurrent Stop hooks block, not interleave |
+| **Read-modify-write** | Load queue → validate `version: 1` → filter malformed entries |
+| **Dedup** | Skip enqueue when `session_id` already present (repeat Stop on same session is a no-op) |
+| **Cap** | `MAX_QUEUE = 50` — newest-first (`unshift`); trim tail after insert |
+| **Atomic persist** | Write `path.<random>.tmp` then `rename(tmp, path)` — readers never see partial JSON |
+
+Phase 5 skill consumers should use the same lock when dequeuing or mutating the queue.
 
 ## Queue record shape
 
@@ -47,7 +61,8 @@ When `hooks.Stop.extractLearnings: true` (default in config template; Stop hook 
 
 | API | Purpose |
 |-----|---------|
-| `resolveTranscriptPath` | Stop path resolution |
+| `resolveTranscriptPath` | Stop path resolution — `transcript_path` if set, else `resolveRolloutPath` |
+| `resolveRolloutPath` | Cwd → newest matching rollout JSONL (existing) |
 | `listUserMessages` | Learnings input scan |
 | `latestResult` / `readLastAgentText` | Existing — behavioral rules + spike harness |
 
