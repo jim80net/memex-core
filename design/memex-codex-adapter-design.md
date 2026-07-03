@@ -209,7 +209,7 @@ Semantic round-trip of `{name, description, queries, body}` — not byte-identic
 
 | Artifact | Path (under hermes repo) |
 |----------|--------------------------|
-| Fixtures | `test/fixtures/cross-adapter/{golden-memory-frontmatter,section,prose}.md` + `README.md` |
+| Fixtures | `test/fixtures/cross-adapter/golden-memory-frontmatter.md`, `test/fixtures/cross-adapter/golden-memory-section.md`, `test/fixtures/cross-adapter/golden-memory-prose.md` + `README.md` |
 | Tier 1 tests | `test/ts/cross-adapter-compat.test.ts` (read/write/round-trip, **#10-boundary**, prose→`[]`) |
 | Tier 2 tests | `test/ts/cross-adapter-pin-alignment.test.ts` |
 | Design authority | `design/cross-adapter-byte-compat-golden.md` |
