@@ -1,0 +1,53 @@
+{
+  "hooks": {
+    "SessionStart": [
+      {
+        "matcher": "startup|resume",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash scripts/spike/log-hook.sh",
+            "timeout": 5,
+            "statusMessage": "memex phase-1 spike (SessionStart)"
+          }
+        ]
+      }
+    ],
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash scripts/spike/inject-user-prompt.sh",
+            "timeout": 5,
+            "statusMessage": "memex phase-1 spike (UserPromptSubmit inject)"
+          }
+        ]
+      }
+    ],
+    "PreToolUse": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash scripts/spike/log-hook.sh",
+            "timeout": 5,
+            "statusMessage": "memex phase-1 spike (PreToolUse)"
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash scripts/spike/log-hook.sh",
+            "timeout": 10,
+            "statusMessage": "memex phase-1 spike (Stop)"
+          }
+        ]
+      }
+    ]
+  }
+}
