@@ -27,6 +27,7 @@
 | xdesk | Session store dual layout | **Updated** — rollout JSONL canonical turn log + SQLite index; reuse flotilla `codexstore` (PR #259) | §4.5, §8 |
 | trio | §4.7 rules scope overstated | **Fixed** — defense-in-depth backstop only; not wholesale merge/push forbid (PR #259 fix round) | §4.7 |
 | trio | `${PLUGIN_ROOT}` undocumented | **Fixed** — documented in §4.1 plugin hook commands | §4.1 |
+| memex | §5.5 golden-fixture contract | **Confirmed** — freeze `memex-hermes` `main` @ `edf1bf6`; Phase 3 unblocked | §5.2–§5.5, §9 |
 
 ## 1. Goal
 
@@ -204,13 +205,22 @@ Semantic round-trip of `{name, description, queries, body}` — not byte-identic
 
 ### 5.2 Fixtures (hermes-owned — writer contract authority)
 
+**Contract freeze pointer (memex XO confirmed 2026-07-03):** pin **`memex-hermes` `main` @ `edf1bf6`**. Paths stable on main:
+
+| Artifact | Path (under hermes repo) |
+|----------|--------------------------|
+| Fixtures | `test/fixtures/cross-adapter/golden-memory-frontmatter.md`, `test/fixtures/cross-adapter/golden-memory-section.md`, `test/fixtures/cross-adapter/golden-memory-prose.md` + `README.md` |
+| Tier 1 tests | `test/ts/cross-adapter-compat.test.ts` (read/write/round-trip, **#10-boundary**, prose→`[]`) |
+| Tier 2 tests | `test/ts/cross-adapter-pin-alignment.test.ts` |
+| Design authority | `design/cross-adapter-byte-compat-golden.md` |
+
 | Fixture | Proves |
 |---------|--------|
-| `golden-memory-frontmatter.md` | L1a `formatMemoryEntry` shape |
+| `golden-memory-frontmatter.md` | L1a `formatMemoryEntry` shape — **byte contract** |
 | `golden-memory-section.md` | L1b section parser |
-| `golden-memory-prose.md` | Pinned prose → `[]` (#12) |
+| `golden-memory-prose.md` | Pinned prose → `parseMemoryFile` → `[]` (#12) |
 
-memex-claude does **not** consume these fixtures; memex-codex **does** (as reader + format reproducer, not as hermes-tool writer).
+memex-claude does **not** consume these fixtures; memex-codex **does** (reader + format reproducer via replicated `formatMemoryEntry`, not hermes-tool writer). **Vendor/copy fixtures into `memex-codex`** at freeze SHA — do not symlink a private hermes checkout in CI.
 
 ### 5.3 Test tiers (revised for Option A)
 
@@ -220,24 +230,37 @@ memex-claude does **not** consume these fixtures; memex-codex **does** (as reade
 | **2** | vitest (always-on) | Dependency alignment (below) |
 | ~~**3**~~ | ~~pytest e2e~~ | **Removed for v1** — Tier 3 targets `memex_remember` binary dispatch (hermes harness tool). Inapplicable under Option A. Reintroduce only if Option B ships (§5.6). |
 
-**Tier-2 pin policy:**
+**Tier-2 pin policy (verified @ `edf1bf6`):**
 
-| Check | Source | Constant | Load-bearing? |
-|-------|--------|----------|---------------|
-| Declared range | `package.json` | `^0.4.0`, `^3.8.1` | Documentary |
-| Resolved version | `node_modules/.../package.json` | `0.4.0`, `3.8.1` | **Yes** |
+| Package | Declared range | **Resolved (assert `===`)** | Load-bearing? |
+|---------|----------------|----------------------------|---------------|
+| `@jim80net/memex-core` | `^0.4.0` | **`0.4.0`** | **Yes** |
+| `@huggingface/transformers` | `^3.8.1` | **`3.8.1`** | **Yes** |
 
-### 5.4 Writer obligation — vendoring required
+Caret ranges are documentary only; Tier-2 tests assert installed resolved versions.
 
-`formatMemoryEntry` is in **memex-hermes only** — confirmed **not** in memex-core. memex-codex **must** vendor `src/core/memory-format.ts` (+ `safeYamlScalar`) until upstreamed. §5.5 answers are **blocking inputs for Phase 3** conformance work — do not start Tier-1 writer tests until memex desk confirms fixture stability.
+### 5.4 Writer obligation — replicate, swap-ready
 
-### 5.5 Coordination asks (blocking Phase 3)
+`formatMemoryEntry` is in **memex-hermes** (`src/core/memory-format.ts` + `safeYamlScalar`) — **not** in memex-core today and **not** npm-importable (hermes is private). memex-codex **replicates** the 5-line frontmatter block shape; **golden-memory-frontmatter.md bytes are the contract** (match exactly = shape match).
 
-Sent to memex desk via flotilla — **gate inputs, not nice-to-have:**
+**Upstream (#20, track don't block):** centroid design (`design/knowledge-lifecycle-centroid-20`) proposes relocating `formatMemoryEntry` into memex-core — `[awaiting-auth]` operator decision, gated on #10; no target PR yet. Structure replicated code so a future `@jim80net/memex-core` import is a drop-in swap; memex XO will ping when it lands.
 
-1. Golden fixture path stability on memex-hermes main
-2. `formatMemoryEntry` upstream timeline to memex-core
-3. Current resolved pin baseline
+**In-flight pins (flip in lockstep with hermes):**
+
+| Issue | Behavior memex-codex must pin |
+|-------|------------------------------|
+| **#10** | Embedded `"/\` in frontmatter scalars do **not** round-trip (colon/unicode/trailing-space do); carry boundary test from hermes Tier 1 |
+| **#12** | Heading-less prose → `parseMemoryFile` → `[]`; `golden-memory-prose.md` pins it |
+
+### 5.5 Coordination — **CONFIRMED** (memex XO 2026-07-03)
+
+| Ask | Answer |
+|-----|--------|
+| Fixture stability | **Stable** on `main` @ `edf1bf6` — adopt 3 fixtures + Tier 1+2 tests + design doc |
+| `formatMemoryEntry` upstream | **Planned**, not before memex-codex ships; replicate now, swap on memex ping |
+| Pin baseline | `@jim80net/memex-core` **`0.4.0`**, `@huggingface/transformers` **`3.8.1`** (resolved) |
+
+**Phase 3 conformance work is unblocked** (auth-independent; parallel to Phase 1 live spike).
 
 ### 5.6 Memory write path — **Option A** (P1 resolution)
 
@@ -358,7 +381,7 @@ Unrelated to `autoMemoryMode: "takeover"` (§2.1). v1: ignore `memories_1.sqlite
 | **0** | Design v1.2 + COS final gate | Dual reviewer clean |
 | **1** | Spike: **plugin-installed** hooks fire; **UserPromptSubmit** returns `additionalContext` **visible in model turn**; capture stdin JSON per event; confirm no `transcript_path` on Stop | Field names + injection proof |
 | **2** | `memex-codex` scaffold + handler port | CI green |
-| **3** | Tier 1+2 conformance (**§5.5 answers required**) | Golden fixtures |
+| **3** | Tier 1+2 conformance (fixtures @ `edf1bf6`, replicated `formatMemoryEntry`, #10/#12 pins) | vitest green |
 | **4** | Session-end learnings design (rollout JSONL via `codexstore`; Stop payload; SQLite fallback) | Design spike |
 | **5** | Install + `help`/`doctor`/`handoff`/`memory-creation` skills | Dogfood |
 | **6** | Cross-harness sync read after agent write | Merge-ready |
@@ -375,7 +398,7 @@ Unrelated to `autoMemoryMode: "takeover"` (§2.1). v1: ignore `memories_1.sqlite
 | Agent writes malformatted memory files | `memory-creation` skill + Tier 1 format tests |
 | No Stop `transcript_path` | Phase 4 rollout JSONL via flotilla `codexstore` |
 | Hook trust friction | `/hooks` + install docs |
-| §5.5 unanswered | Block Phase 3 |
+| #10 grammar fix lands in hermes | Flip boundary pin in lockstep |
 
 ## 11. Verification
 
@@ -387,4 +410,4 @@ Unrelated to `autoMemoryMode: "takeover"` (§2.1). v1: ignore `memories_1.sqlite
 
 - [Codex hooks](https://developers.openai.com/codex/hooks)
 - [Codex plugins / build](https://developers.openai.com/codex/plugins/build)
-- `memex-hermes/design/cross-adapter-byte-compat-golden.md`
+- `memex-hermes/design/cross-adapter-byte-compat-golden.md` (freeze @ `edf1bf6`)
