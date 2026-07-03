@@ -46,17 +46,51 @@ Live captures from session `019f25aa-985b-7510-99a7-157901d23b14` (tool-using tu
 {"session_id":"019f25aa-985b-7510-99a7-157901d23b14","turn_id":"019f25aa-9906-7a70-91e5-8bcf6898981e","transcript_path":"/home/jim/.codex/sessions/2026/07/03/rollout-2026-07-03T01-49-24-019f25aa-985b-7510-99a7-157901d23b14.jsonl","cwd":"/home/jim/workspace/github.com/jim80net/codex-memex-dev","hook_event_name":"Stop","model":"gpt-5.5","permission_mode":"bypassPermissions","stop_hook_active":false,"last_assistant_message":"memex-spike: injection marker 7f3a"}
 ```
 
-## Phase 1b — injection proof (FAIL / inconclusive)
+## Phase 1b — injection proof
+
+### Initial negative (methodology sound — false positives rejected)
+
+First live pass used **bare** top-level `{"additionalContext":"..."}` (Claude-shaped stdout). Codex 0.142.5 reported **`UserPromptSubmit Failed`** on every turn; rollout lacked injected text; neutral prompts usually returned `<!-- gitnexus:start -->` (first line of loaded `AGENTS.md`).
 
 | Probe | Result |
 |-------|--------|
-| Hook stdout wire | `{"additionalContext":"memex-spike: injection marker 7f3a"}` (string scalar) |
-| Codex hook status | **`UserPromptSubmit Failed`** on every live turn with `inject-user-prompt.sh` (despite valid JSON on pipe) |
-| Rollout prompt visibility | **No `7f3a` / `memex-spike` in rollout JSONL prompt items** before model acts |
-| Neutral prompt replies | Usually `<!-- gitnexus:start -->` (first line of loaded `AGENTS.md`) |
-| Apparent success once | Model returned `memex-spike: injection marker 7f3a` after **`rg` repo search** found `scripts/spike/inject-user-prompt.sh` — **not** hook `additionalContext` |
+| Hook stdout wire (v1) | `{"additionalContext":"memex-spike: injection marker 7f3a"}` — **invalid** for Codex |
+| Codex hook status | **`UserPromptSubmit Failed`** |
+| Rollout prompt visibility | No `7f3a` before model acts |
+| Rejected false positive | Model once returned `7f3a` after **`rg` repo search** hit `inject-user-prompt.sh`, and once after a **leaky prompt** (`contains 7f3a`) — neither counts as hook injection |
 
-**Verdict:** `additionalContext` injection is **not confirmed model-visible** on this host. Phase 1b gate **not met**. Adapter must not assume Claude-isomorphic string `additionalContext` works on Codex 0.142.5 without further wire debugging (array vs string, hook failure root cause, interactive `/hooks` trust path).
+**Root cause (COS + binary schema verified):** `UserPromptSubmitHookSpecificOutputWire` requires the **`hookSpecificOutput` wrapper** (`additionalProperties: false` on top-level `HookOutput`). Bare `additionalContext` fails schema validation → hook Failed. **Not** a platform denial of injection.
+
+### Corrected wire + re-run (PASS)
+
+**Required stdout shape (UserPromptSubmit):**
+
+```json
+{
+  "hookSpecificOutput": {
+    "hookEventName": "UserPromptSubmit",
+    "additionalContext": "memex-spike: injection marker 7f3a"
+  }
+}
+```
+
+Every Codex hook event has its own `*HookSpecificOutputWire` with the same nesting pattern.
+
+**Passing session:** `019f25b4-c0fe-7712-8c5a-1c54674556a3` (2026-07-03, user-level hooks only + `--dangerously-bypass-hook-trust`).
+
+| Probe | Result |
+|-------|--------|
+| Codex stderr | `hook: UserPromptSubmit` → **`Completed`** |
+| Model reply | `memex-spike: injection marker 7f3a` |
+| Rollout | `role: developer` / `input_text`: `memex-spike: injection marker 7f3a` — **zero tool calls** |
+| Neutral prompt | `what marker did memex inject? Reply with the exact marker string only, nothing else.` |
+
+**Stop capture (passing turn):**
+```json
+{"session_id":"019f25b4-c0fe-7712-8c5a-1c54674556a3","turn_id":"019f25b4-c180-7453-978f-225eee29e340","transcript_path":"/home/jim/.codex/sessions/2026/07/03/rollout-2026-07-03T02-00-30-019f25b4-c0fe-7712-8c5a-1c54674556a3.jsonl","cwd":"/home/jim/workspace/github.com/jim80net/codex-memex-dev","hook_event_name":"Stop","model":"gpt-5.5","permission_mode":"bypassPermissions","stop_hook_active":false,"last_assistant_message":"memex-spike: injection marker 7f3a"}
+```
+
+**Verdict:** Phase 1b **PASS** with wrapped wire. Hook-based context injection on Codex 0.142.5 is **confirmed** — semantics Claude-isomorphic (`additionalContext` string inside event-specific `hookSpecificOutput`).
 
 ## Design assumptions — empirical status
 
@@ -64,20 +98,20 @@ Live captures from session `019f25aa-985b-7510-99a7-157901d23b14` (tool-using tu
 |------------|-------------------|--------------|
 | **Stop `transcript_path` absent** | Absent; use rollout JSONL via `codexstore` | **FALSIFIED** — present on **SessionStart, UserPromptSubmit, PreToolUse, Stop**; points at `~/.codex/sessions/.../rollout-*.jsonl` |
 | **AGENTS.md 32 KiB cap** | Documented default, unverified | `AGENTS.md` in this worktree = **4318 bytes** (loaded in full; cap not exercised) |
-| **`additionalContext` in model turn** | UserPromptSubmit injects visible context | **Not demonstrated** (hook reports Failed; rollout lacks injected text) |
+| **`additionalContext` in model turn** | UserPromptSubmit injects visible context | **CONFIRMED** with `hookSpecificOutput` wrapper; bare top-level wire fails schema |
 | **Stop extra fields** | (not previously listed) | **`last_assistant_message`**, **`stop_hook_active`** (false in exec mode) |
 
 ## Required design updates (before Phase 2 adapter logic)
 
 1. **§4.5 / §9:** `transcript_path` is **present** on Stop (and other events) — path is the rollout JSONL file. Phase 4 may use Stop stdin `transcript_path` **or** `codexstore` (both valid; prefer documenting dual path).
 2. **§4.2:** `project_doc_max_bytes` default **32 KiB** — AGENTS.md here is 4.2 KiB; cap not hit (still not a measured config default on host).
-3. **§4.1 / hook wire:** Document `UserPromptSubmit` hook **Failed** status with current string `additionalContext` output; spike did not confirm `AdditionalContextEntry` array wire.
+3. **§4.1 / hook wire:** Codex requires per-event `hookSpecificOutput` wrapper (`hookEventName` + event fields, `additionalProperties: false`). UserPromptSubmit: `{"hookSpecificOutput":{"hookEventName":"UserPromptSubmit","additionalContext":"<string>"}}`. Bare top-level `additionalContext` fails validation. memex-on-codex **stays on hook-based injection** — no pivot.
 4. **Phase 1c:** Still pending plugin-bundled hooks + interactive `/hooks` trust (not exercised).
 
 ## Operator / automation notes
 
-- `codex exec` automation required **user-level** `~/.codex/hooks.json` in this environment.
-- Duplicate project + user hook layers caused concurrent UserPromptSubmit handlers in some runs — use **one** hook source per spike.
+- `codex exec` automation used **user-level** `~/.codex/hooks.json` only (project `.codex/hooks.json` disabled for pass run) — **one hook source**, no concurrent handlers.
+- Project `.codex/hooks.json` alone did not fire in `codex exec` without user-level hooks in this environment (trust + bypass insufficient); Phase 1c will validate plugin-bundled path.
 
 ## Teardown (unchanged)
 
