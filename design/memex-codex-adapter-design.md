@@ -1,6 +1,6 @@
 # memex-codex — Adapter Design
 
-**Status:** **APPROVED v1.2** (COS final gate 2026-07-02) — Phase 0 complete; **Phase 1 complete** (1a/1b live spike PR #27; **1c PASS** plugin-bundled hooks, memex-core PR #30 + memex-codex PR #5)
+**Status:** **APPROVED v1.2** (COS final gate 2026-07-02) — Phase 0 complete; **Phase 1 complete**; **Phase 2 complete** (#6 PreToolUse); **Phase 4 in flight** (session-end learnings queue — see `design/phase-4-session-end-learnings.md`)
 **Date:** 2026-07-02
 **Author:** codex-memex-dev desk
 **Related:** `@jim80net/memex-core`, `memex-claude`, `memex-openclaw`, `memex-hermes`, `codex-harness-dev`
@@ -396,7 +396,7 @@ Unrelated to `autoMemoryMode: "takeover"` (§2.1). v1: ignore `memories_1.sqlite
 | **1** | Spike: **UserPromptSubmit** `hookSpecificOutput` injection **visible in model turn** (1a/1b **done**); capture stdin JSON per event (**done**); **1c PASS:** plugin-bundled hooks via `codex plugin add` (SessionStart/UserPromptSubmit/Stop **Completed**) | Field names + injection proof |
 | **2** | `memex-codex` scaffold + handler port | CI green |
 | **3** | Tier 1+2 conformance (fixtures @ `edf1bf6`, replicated `formatMemoryEntry`, #10/#12 pins) | vitest green |
-| **4** | Session-end learnings design (rollout JSONL via `codexstore`; Stop payload; SQLite fallback) | Design spike |
+| **4** | Session-end learnings — mechanical queue + rollout scan (`memex-learnings-queue.json`); Stop `last_assistant_message` fast path; SQLite fallback deferred | vitest green (memex-codex PR) |
 | **5** | Install + `help`/`doctor`/`handoff`/`memory-creation` skills | Dogfood |
 | **6** | Cross-harness sync read after agent write | Merge-ready |
 
