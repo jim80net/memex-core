@@ -7,6 +7,29 @@ de facto centroid for memory / skill / rule management."*
 (primary) + the adapter repos (memex-claude/hermes/grok/openclaw thin out).
 **Author:** memex flotilla XO · grounded in the audit on #20.
 
+## 0a. FIRM REQUIREMENT — the three-tier TRUST model (rev3, CoS/operator directive 2026-07-04)
+
+The operator named web-scanning / R&D lanes a **prompt-poisoning attack vector**.
+Consequence for this centroid: the corpus is not a flat store — it is **trust-tiered**,
+and the audience decision below (§0) decides tier **boundaries, NOT whether tiers
+exist**. Every corpus entry carries a **trust tier + provenance**, and injection
+authority is gated by tier:
+
+| Tier | Contents | Injection authority |
+|------|----------|---------------------|
+| **TRUSTED** | operator doctrine / identity / rules (the `CLAUDE.md` constitution, the standing rules) | **Authoritative + always-on** — feeds the always-injected channel every harness must have (memex-hermes#26). This is doctrine. |
+| **SHAREABLE** | project/episodic memory, skills — the private-vs-shareable partition the operator's §0 decision partitions | Retrieval + (per policy) injection; not identity/doctrine |
+| **UNTRUSTED-INGESTED** | R&D / web-derived findings | **Gated, provenance-labeled, retrieval-only** — NO agent may treat it as doctrine/identity/rules; NEVER feeds authoritative injection. Surfaced with an explicit "untrusted source, provenance=<x>" wrapper so the model can weigh but not obey it. |
+
+**Centroid consequences (firm, independent of the §0 audience decision):**
+- `ingestRule`/`ingestConstitution` tag entries **TRUSTED**; a new `ingestObservation(entry, provenance)` writes **UNTRUSTED-INGESTED** with a required provenance field and an `untrusted: true` marker in frontmatter.
+- The lifecycle's injection/plan functions MUST partition by tier: only TRUSTED (and, per the §0 decision, SHAREABLE) feed authoritative/always-on injection; UNTRUSTED is retrieval-only and always provenance-wrapped.
+- The corpus `type`/frontmatter schema gains a `trust` + `provenance` field (memex-core owns it as the centroid).
+- A poisoned web finding entering via an R&D lane therefore CANNOT become doctrine — it lands UNTRUSTED, labeled, never authoritatively injected. (This is the attack-surface fix.)
+- Ties to memex-hermes#26 (trusted tier → authoritative always-on injection) — the injection half of the same model.
+
+Full spec: flotilla#369 + fleet-ops operator-preferences R&D section.
+
 ## 0. Review-trio verdict + the GATING decision (rev2 — read first)
 
 systems-review + open-code-review + STORM on rev1. Verdict: **the mechanism/judgment
