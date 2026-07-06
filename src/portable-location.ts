@@ -29,6 +29,12 @@ export const HANDLE_PREFIX = "memex://";
 
 export type PortableLocationWarn = (message: string) => void;
 
+/** Filesystem path + optional memory section name (fragment decoded once). */
+export type ResolvedPortableLocation = {
+  filePath: string;
+  sectionName?: string;
+};
+
 /**
  * Portable handles are opaque location tokens — not general URIs.
  * Form: memex://{rootKey}/{posix-rel}[#{fragment}]
@@ -212,21 +218,27 @@ export function encodePortableLocation(
 }
 
 /**
- * Portable handle → absolute path (+ optional #fragment). Fail-closed on traversal escape.
+ * Portable handle → absolute file path + optional section name.
+ * Fragment is split and %23-unescaped exactly once — never rejoin with '#'.
+ * Fail-closed on traversal escape.
  */
-export function decodePortableLocation(registry: ScanRootRegistry, handle: string): string {
+export function decodePortableLocationResolved(
+  registry: ScanRootRegistry,
+  handle: string,
+): ResolvedPortableLocation {
   if (!handle.startsWith(HANDLE_PREFIX)) {
     throw new Error(`invalid portable location handle: ${handle}`);
   }
 
-  const { body, fragment } = splitPortableHandle(handle.slice(HANDLE_PREFIX.length));
-  const slash = body.indexOf("/");
+  const { body, fragment: sectionName } = splitPortableHandle(handle);
+  const pathBody = body.slice(HANDLE_PREFIX.length);
+  const slash = pathBody.indexOf("/");
   if (slash === -1) {
     throw new Error(`invalid portable location handle (missing path segment): ${handle}`);
   }
 
-  const key = body.slice(0, slash);
-  const rel = body.slice(slash + 1);
+  const key = pathBody.slice(0, slash);
+  const rel = pathBody.slice(slash + 1);
   if (hasUnsafeRelSegments(rel)) {
     throw new Error(`portable location handle escapes scan root: ${handle}`);
   }
@@ -236,37 +248,57 @@ export function decodePortableLocation(registry: ScanRootRegistry, handle: strin
     throw new Error(`unknown portable location root '${key}'`);
   }
 
-  const absolute = resolve(root.rootPath, rel);
-  if (!isPathContained(root.rootPath, absolute)) {
+  const filePath = resolve(root.rootPath, rel);
+  if (!isPathContained(root.rootPath, filePath)) {
     throw new Error(`portable location handle escapes scan root: ${handle}`);
   }
 
-  return fragment ? `${absolute}#${fragment}` : absolute;
+  return sectionName !== undefined ? { filePath, sectionName } : { filePath };
 }
 
 /**
- * Resolve portable handle or legacy absolute path to absolute for filesystem I/O.
+ * Portable handle → absolute path string (legacy join form).
+ * Prefer decodePortableLocationResolved when a fragment may be present.
+ */
+export function decodePortableLocation(registry: ScanRootRegistry, handle: string): string {
+  const { filePath, sectionName } = decodePortableLocationResolved(registry, handle);
+  return sectionName !== undefined ? `${filePath}#${sectionName}` : filePath;
+}
+
+/**
+ * Resolve portable handle or legacy absolute path for filesystem I/O.
  * Phase 2: agent-facing read tools MUST pass `allowAbsolute: false` so untrusted
  * absolute paths cannot bypass containment (memex-grok#19 closes only then).
  */
-export function resolvePortableLocation(
+export function resolvePortableLocationResolved(
   registry: ScanRootRegistry,
   input: string,
   options?: { warn?: PortableLocationWarn; allowAbsolute?: boolean },
-): string {
+): ResolvedPortableLocation {
   const trimmed = input.trim();
-  if (!trimmed) return trimmed;
+  if (!trimmed) return { filePath: trimmed };
 
   if (trimmed.startsWith(HANDLE_PREFIX)) {
-    return decodePortableLocation(registry, trimmed);
+    return decodePortableLocationResolved(registry, trimmed);
   }
 
   if (options?.allowAbsolute !== false && isAbsolutePath(trimmed)) {
     options?.warn?.(
       `deprecated: readSkillContent received absolute path; use portable memex:// handles`,
     );
-    return trimmed;
+    const { body, fragment } = splitPortableHandle(trimmed);
+    return fragment !== undefined ? { filePath: body, sectionName: fragment } : { filePath: body };
   }
 
   throw new Error(`unrecognized location: ${input}`);
+}
+
+/** @deprecated Prefer resolvePortableLocationResolved to avoid fragment double-decode. */
+export function resolvePortableLocation(
+  registry: ScanRootRegistry,
+  input: string,
+  options?: { warn?: PortableLocationWarn; allowAbsolute?: boolean },
+): string {
+  const { filePath, sectionName } = resolvePortableLocationResolved(registry, input, options);
+  return sectionName !== undefined ? `${filePath}#${sectionName}` : filePath;
 }

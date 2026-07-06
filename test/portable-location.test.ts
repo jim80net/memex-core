@@ -5,9 +5,11 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   buildScanRoots,
   decodePortableLocation,
+  decodePortableLocationResolved,
   encodeFragment,
   encodePortableLocation,
   resolvePortableLocation,
+  resolvePortableLocationResolved,
   type ScanRootContext,
   splitPortableHandle,
 } from "../src/portable-location.ts";
@@ -117,9 +119,10 @@ describe("portable-location", () => {
     const base = encodePortableLocation(registry, file);
     expect(base).toBe("memex://memory-unclassified-f87226b1/note.md");
     const handle = `${base}#${encodeFragment("Part#Two")}`;
-    const { body, fragment } = splitPortableHandle(handle);
-    expect(fragment).toBe("Part#Two");
-    expect(decodePortableLocation(registry, body)).toBe(file);
+    const resolved = decodePortableLocationResolved(registry, handle);
+    expect(resolved.filePath).toBe(file);
+    expect(resolved.sectionName).toBe("Part#Two");
+    expect(resolvePortableLocationResolved(registry, handle).sectionName).toBe("Part#Two");
   });
 
   it("resolvePortableLocation accepts absolute paths with deprecation warn", () => {

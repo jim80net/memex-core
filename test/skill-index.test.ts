@@ -787,6 +787,52 @@ Section body with a literal hash in the name.`,
     expect(content).toContain("Section body with a literal hash in the name.");
   });
 
+  it("readSkillContent round-trips memory section names containing hash", async () => {
+    const memDir = join(testDir, "memories");
+    await mkdir(memDir, { recursive: true });
+    await writeFile(
+      join(memDir, "note.md"),
+      `## Part#Two
+Section body with hash in name.
+
+Triggers: "hash section"
+`,
+    );
+
+    const registry = buildScanRoots(
+      {
+        cwd: testDir,
+        harness: "grok",
+        globalSkillsDirs: [join(testDir, "skills")],
+        globalRulesDirs: [],
+        projectSkillsDir: join(testDir, ".grok", "skills"),
+        projectRulesDir: join(testDir, ".grok", "rules"),
+      },
+      {
+        skillDirs: [join(testDir, "skills")],
+        memoryDirs: [memDir],
+        ruleDirs: [],
+      },
+    );
+
+    mockEmbed.mockResolvedValueOnce(makeEmbeddings(3)).mockResolvedValueOnce([[1, 0, 0, 0]]);
+
+    const index = new SkillIndex({ ...DEFAULT_CORE_CONFIG }, mockProvider, cachePath, { registry });
+    await index.build({
+      skillDirs: [join(testDir, "skills")],
+      memoryDirs: [memDir],
+      ruleDirs: [],
+    });
+
+    const results = await index.search("hash section", 3, 0.0);
+    const hit = results.find((r) => r.skill.name === "Part#Two");
+    expect(hit).toBeDefined();
+    expect(hit!.skill.location).toContain("%23");
+
+    const content = await index.readSkillContent(hit!.skill.location);
+    expect(content).toContain("Section body with hash in name");
+  });
+
   it("stores portable memex:// handles when registry is configured", async () => {
     const skillsDir = join(testDir, "skills");
     const registry = buildScanRoots(

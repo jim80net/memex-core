@@ -9,7 +9,7 @@ import {
   encodePortableLocation,
   HANDLE_PREFIX,
   type PortableLocationWarn,
-  resolvePortableLocation,
+  resolvePortableLocationResolved,
   type ScanRootRegistry,
   splitPortableHandle,
 } from "./portable-location.js";
@@ -592,21 +592,15 @@ export class SkillIndex {
    */
   async readSkillContent(location: string): Promise<string> {
     const trimmed = location.trim();
-    let filePath: string;
-    let sectionName: string | undefined;
+    const { filePath, sectionName } = this.registry
+      ? resolvePortableLocationResolved(this.registry, trimmed, { warn: (m) => this.warn(m) })
+      : (() => {
+          const { body, fragment } = splitPortableHandle(trimmed);
+          return fragment !== undefined
+            ? { filePath: body, sectionName: fragment }
+            : { filePath: body };
+        })();
 
-    // Split portable handles before decode — decodePortableLocation rejoins
-    // fragment with '#', which would break sections whose names contain '#'.
-    if (this.registry && trimmed.startsWith(HANDLE_PREFIX)) {
-      const { body, fragment } = splitPortableHandle(trimmed);
-      filePath = decodePortableLocation(this.registry, body);
-      sectionName = fragment;
-    } else {
-      const resolved = this.registry
-        ? resolvePortableLocation(this.registry, trimmed, { warn: (m) => this.warn(m) })
-        : trimmed;
-      ({ body: filePath, fragment: sectionName } = splitPortableHandle(resolved));
-    }
     if (sectionName !== undefined) {
       const raw = await readFile(filePath, "utf-8");
       const sections = parseMemoryFile(raw, filePath);

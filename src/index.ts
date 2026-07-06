@@ -6,6 +6,7 @@ export * from "./path-encoder.js";
 export type {
   HarnessKind,
   PortableLocationWarn,
+  ResolvedPortableLocation,
   ScanRoot,
   ScanRootContext,
   ScanRootRegistry,
@@ -15,10 +16,12 @@ export {
   buildScanRoots,
   decodeFragment,
   decodePortableLocation,
+  decodePortableLocationResolved,
   encodeFragment,
   encodePortableLocation,
   HANDLE_PREFIX,
   resolvePortableLocation,
+  resolvePortableLocationResolved,
   splitPortableHandle,
   stableUnclassifiedKey,
 } from "./portable-location.js";
