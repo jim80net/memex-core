@@ -6,7 +6,11 @@ import { saveCache } from "../src/cache.ts";
 import { DEFAULT_CORE_CONFIG } from "../src/config.ts";
 import type { EmbeddingProvider } from "../src/embeddings.ts";
 import { cosineSimilarity } from "../src/embeddings.ts";
-import { buildScanRoots } from "../src/portable-location.ts";
+import {
+  buildScanRoots,
+  encodeFragment,
+  encodePortableLocation,
+} from "../src/portable-location.ts";
 import type { ScanDirs } from "../src/skill-index.ts";
 import { parseFrontmatter, parseMemoryFile, SkillIndex } from "../src/skill-index.ts";
 
@@ -740,6 +744,47 @@ Always use pnpm for all package management.`,
     ).resolves.toBeUndefined();
     expect(index2.skillCount).toBe(2);
     expect(warn).toHaveBeenCalledWith(expect.stringContaining("sync-skills"));
+  });
+
+  it("readSkillContent resolves portable memory sections with hash in name", async () => {
+    const memoryDir = join(testDir, "memory");
+    await mkdir(memoryDir, { recursive: true });
+    await writeFile(
+      join(memoryDir, "note.md"),
+      `## Part#Two
+Description for section with hash.
+
+Section body with a literal hash in the name.`,
+    );
+
+    const registry = buildScanRoots(
+      {
+        cwd: testDir,
+        harness: "grok",
+        globalSkillsDirs: [join(testDir, "skills")],
+        globalRulesDirs: [],
+        projectSkillsDir: join(testDir, ".grok", "skills"),
+        projectRulesDir: join(testDir, ".grok", "rules"),
+      },
+      { skillDirs: [join(testDir, "skills")], memoryDirs: [memoryDir], ruleDirs: [] },
+    );
+
+    mockEmbed.mockResolvedValueOnce(makeEmbeddings(1));
+
+    const index = new SkillIndex({ ...DEFAULT_CORE_CONFIG }, mockProvider, cachePath, { registry });
+    await index.build({
+      skillDirs: [join(testDir, "skills")],
+      memoryDirs: [memoryDir],
+      ruleDirs: [],
+    });
+
+    const memoryFile = join(memoryDir, "note.md");
+    const baseHandle = encodePortableLocation(registry, memoryFile);
+    expect(baseHandle).not.toBeNull();
+    const location = `${baseHandle}#${encodeFragment("Part#Two")}`;
+
+    const content = await index.readSkillContent(location);
+    expect(content).toContain("Section body with a literal hash in the name.");
   });
 
   it("stores portable memex:// handles when registry is configured", async () => {

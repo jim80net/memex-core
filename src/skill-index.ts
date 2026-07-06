@@ -591,11 +591,22 @@ export class SkillIndex {
    * Read the body content of a skill file, stripping frontmatter.
    */
   async readSkillContent(location: string): Promise<string> {
-    const resolved = this.registry
-      ? resolvePortableLocation(this.registry, location, { warn: (m) => this.warn(m) })
-      : location;
+    const trimmed = location.trim();
+    let filePath: string;
+    let sectionName: string | undefined;
 
-    const { body: filePath, fragment: sectionName } = splitPortableHandle(resolved);
+    // Split portable handles before decode — decodePortableLocation rejoins
+    // fragment with '#', which would break sections whose names contain '#'.
+    if (this.registry && trimmed.startsWith(HANDLE_PREFIX)) {
+      const { body, fragment } = splitPortableHandle(trimmed);
+      filePath = decodePortableLocation(this.registry, body);
+      sectionName = fragment;
+    } else {
+      const resolved = this.registry
+        ? resolvePortableLocation(this.registry, trimmed, { warn: (m) => this.warn(m) })
+        : trimmed;
+      ({ body: filePath, fragment: sectionName } = splitPortableHandle(resolved));
+    }
     if (sectionName !== undefined) {
       const raw = await readFile(filePath, "utf-8");
       const sections = parseMemoryFile(raw, filePath);
