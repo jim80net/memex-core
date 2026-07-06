@@ -833,6 +833,117 @@ Triggers: "hash section"
     expect(content).toContain("Section body with hash in name");
   });
 
+  it("escape grammar matrix: index → search → readSkillContent", async () => {
+    const memoryDir = join(testDir, "memory");
+    const sharpDir = join(testDir, "skills", "c#sharp");
+    await mkdir(memoryDir, { recursive: true });
+    await mkdir(sharpDir, { recursive: true });
+    await writeFile(
+      join(memoryDir, "note.md"),
+      `## Part#Two
+Hash section body.
+
+Triggers: "hash section"
+
+## A%23B
+Percent-encoded section body.
+
+Triggers: "percent section"
+
+## 100% done
+Percent sign section body.
+
+Triggers: "percent sign"
+`,
+    );
+    await writeFile(
+      join(sharpDir, "SKILL.md"),
+      `---\nname: sharp-skill\ndescription: Skill under c#sharp dir\n---\nSharp dir body.`,
+    );
+
+    const skillsDir = join(testDir, "skills");
+    const registry = buildScanRoots(
+      {
+        cwd: testDir,
+        harness: "grok",
+        globalSkillsDirs: [skillsDir],
+        globalRulesDirs: [],
+        projectSkillsDir: join(testDir, ".grok", "skills"),
+        projectRulesDir: join(testDir, ".grok", "rules"),
+      },
+      { skillDirs: [skillsDir], memoryDirs: [memoryDir], ruleDirs: [] },
+    );
+
+    // 3 skills + 3 memory sections = 6 embeddings; uniform vectors so search hits by name
+    const uniform = Array.from({ length: 6 }, () => [1, 0, 0, 0] as number[]);
+    mockEmbed
+      .mockResolvedValueOnce(uniform)
+      .mockResolvedValueOnce([[1, 0, 0, 0]])
+      .mockResolvedValueOnce([[1, 0, 0, 0]])
+      .mockResolvedValueOnce([[1, 0, 0, 0]])
+      .mockResolvedValueOnce([[1, 0, 0, 0]]);
+
+    const withRegistry = new SkillIndex({ ...DEFAULT_CORE_CONFIG }, mockProvider, cachePath, {
+      registry,
+    });
+    await withRegistry.build({
+      skillDirs: [skillsDir],
+      memoryDirs: [memoryDir],
+      ruleDirs: [],
+    });
+
+    const hashHit = (await withRegistry.search("hash section", 10, 0.0)).find(
+      (r) => r.skill.name === "Part#Two",
+    );
+    expect(hashHit).toBeDefined();
+    expect(hashHit!.skill.location).toContain("%23");
+    expect(await withRegistry.readSkillContent(hashHit!.skill.location)).toContain(
+      "Hash section body",
+    );
+
+    const pctHit = (await withRegistry.search("percent section", 10, 0.0)).find(
+      (r) => r.skill.name === "A%23B",
+    );
+    expect(pctHit).toBeDefined();
+    expect(pctHit!.skill.location).toContain("%2523");
+    expect(await withRegistry.readSkillContent(pctHit!.skill.location)).toContain(
+      "Percent-encoded section body",
+    );
+
+    const pctSignHit = (await withRegistry.search("percent sign", 10, 0.0)).find(
+      (r) => r.skill.name === "100% done",
+    );
+    expect(pctSignHit).toBeDefined();
+    expect(pctSignHit!.skill.location).toContain("%25");
+    expect(await withRegistry.readSkillContent(pctSignHit!.skill.location)).toContain(
+      "Percent sign section body",
+    );
+
+    const sharpHit = (await withRegistry.search("sharp", 10, 0.0)).find(
+      (r) => r.skill.name === "sharp-skill",
+    );
+    expect(sharpHit).toBeDefined();
+    expect(sharpHit?.skill.location).toMatch(/c%23sharp\/SKILL\.md$/);
+    expect(await withRegistry.readSkillContent(sharpHit!.skill.location)).toContain(
+      "Sharp dir body",
+    );
+
+    // Phase-1 no-registry path: literal %23 section name must round-trip
+    mockEmbed.mockResolvedValueOnce(makeEmbeddings(3));
+    const noRegistry = new SkillIndex(
+      { ...DEFAULT_CORE_CONFIG },
+      mockProvider,
+      join(testDir, "cache2", "skill-router.json"),
+    );
+    await noRegistry.build({
+      skillDirs: [skillsDir],
+      memoryDirs: [memoryDir],
+      ruleDirs: [],
+    });
+    const absKey = `${join(memoryDir, "note.md")}#${encodeFragment("A%23B")}`;
+    expect(await noRegistry.readSkillContent(absKey)).toContain("Percent-encoded section body");
+  });
+
   it("stores portable memex:// handles when registry is configured", async () => {
     const skillsDir = join(testDir, "skills");
     const registry = buildScanRoots(

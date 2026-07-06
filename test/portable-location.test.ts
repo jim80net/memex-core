@@ -9,9 +9,11 @@ import {
   decodePortableLocationResolved,
   encodeFragment,
   encodePortableLocation,
+  escapePortableText,
   resolvePortableLocation,
   type ScanRootContext,
   splitPortableHandle,
+  unescapePortableText,
 } from "../src/portable-location.ts";
 import { LOCATION_ROUND_TRIP_GOLDEN } from "./fixtures/location-round-trip-golden.ts";
 
@@ -112,11 +114,13 @@ describe("portable-location", () => {
     expect(fragment).toBe("Section#Name");
   });
 
-  it("encodeFragment escapes hash and percent reversibly", () => {
-    expect(encodeFragment("a#b")).toBe("a%23b");
-    expect(encodeFragment("A%23B")).toBe("A%2523B");
-    expect(decodeFragment(encodeFragment("Part#Two"))).toBe("Part#Two");
-    expect(decodeFragment(encodeFragment("A%23B"))).toBe("A%23B");
+  it("escapePortableText is injective for # and %", () => {
+    expect(escapePortableText("a#b")).toBe("a%23b");
+    expect(escapePortableText("A%23B")).toBe("A%2523B");
+    expect(unescapePortableText(escapePortableText("Part#Two"))).toBe("Part#Two");
+    expect(unescapePortableText(escapePortableText("A%23B"))).toBe("A%23B");
+    expect(encodeFragment).toBe(escapePortableText);
+    expect(decodeFragment).toBe(unescapePortableText);
   });
 
   it("round-trips section names containing hash or percent", () => {
@@ -135,11 +139,16 @@ describe("portable-location", () => {
 
   it("round-trips absolute paths with literal hash in directory names", () => {
     const registry = fixtureRegistry();
-    const absolute = "/home/user/.grok/skills/c#/SKILL.md";
-    const handle = encodePortableLocation(registry, absolute);
-    expect(handle).toBe("memex://grok-global/c%23/SKILL.md");
-    expect(decodePortableLocation(registry, handle)).toBe(absolute);
-    expect(decodePortableLocationResolved(registry, handle).filePath).toBe(absolute);
+    for (const absolute of [
+      "/home/user/.grok/skills/c#/SKILL.md",
+      "/home/user/.grok/skills/c#sharp/SKILL.md",
+    ]) {
+      const handle = encodePortableLocation(registry, absolute);
+      expect(handle).toContain("%23");
+      expect(decodePortableLocation(registry, handle)).toBe(absolute);
+      expect(decodePortableLocationResolved(registry, handle).filePath).toBe(absolute);
+      expect(decodePortableLocationResolved(registry, handle).sectionName).toBeUndefined();
+    }
   });
 
   it("resolvePortableLocation accepts absolute paths with deprecation warn", () => {

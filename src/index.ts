@@ -19,11 +19,13 @@ export {
   decodePortableLocationResolved,
   encodeFragment,
   encodePortableLocation,
+  escapePortableText,
   HANDLE_PREFIX,
   resolvePortableLocation,
   resolvePortableLocationResolved,
   splitPortableHandle,
   stableUnclassifiedKey,
+  unescapePortableText,
 } from "./portable-location.js";
 export * from "./project-mapping.js";
 export * from "./project-registry.js";

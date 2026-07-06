@@ -39,21 +39,41 @@ export type ResolvedPortableLocation = {
  * Portable handles are opaque location tokens — not general URIs.
  * Form: memex://{rootKey}/{posix-rel}[#{fragment}]
  */
+/** Injective escape for rel segments and fragments (% first, then #). */
+export function escapePortableText(text: string): string {
+  return text.replace(/%/g, "%25").replace(/#/g, "%23");
+}
+
+/** Reverse of escapePortableText (# last on decode, then %). */
+export function unescapePortableText(text: string): string {
+  return text.replace(/%23/g, "#").replace(/%25/g, "%");
+}
+
+/** @alias escapePortableText */
+export const encodeFragment = escapePortableText;
+
+/** @alias unescapePortableText */
+export const decodeFragment = unescapePortableText;
+
+/**
+ * Split at the last literal '#' — escaped #s are %23 and do not split.
+ * Fragment is unescaped exactly once.
+ */
 export function splitPortableHandle(handle: string): { body: string; fragment?: string } {
   const lastHash = handle.lastIndexOf("#");
   if (lastHash === -1) return { body: handle };
   return {
     body: handle.slice(0, lastHash),
-    fragment: decodeFragment(handle.slice(lastHash + 1)),
+    fragment: unescapePortableText(handle.slice(lastHash + 1)),
   };
 }
 
-export function encodeFragment(fragment: string): string {
-  return fragment.replace(/%/g, "%25").replace(/#/g, "%23");
+function encodeRelPath(rel: string): string {
+  return normalizeRel(rel).split("/").map(escapePortableText).join("/");
 }
 
-export function decodeFragment(fragment: string): string {
-  return fragment.replace(/%23/g, "#").replace(/%25/g, "%");
+function decodeRelPath(rel: string): string {
+  return rel.split("/").map(unescapePortableText).join("/");
 }
 
 function normalizeRel(rel: string): string {
@@ -213,9 +233,9 @@ export function encodePortableLocation(
     return null;
   }
 
-  const handle = `${HANDLE_PREFIX}${root.key}/${encodeFragment(rel)}`;
+  const handle = `${HANDLE_PREFIX}${root.key}/${encodeRelPath(rel)}`;
   if (fragment === undefined) return handle;
-  return `${handle}#${encodeFragment(fragment)}`;
+  return `${handle}#${escapePortableText(fragment)}`;
 }
 
 /**
@@ -239,7 +259,7 @@ export function decodePortableLocationResolved(
   }
 
   const key = pathBody.slice(0, slash);
-  const rel = decodeFragment(pathBody.slice(slash + 1));
+  const rel = decodeRelPath(pathBody.slice(slash + 1));
   if (hasUnsafeRelSegments(rel)) {
     throw new Error(`portable location handle escapes scan root: ${handle}`);
   }
