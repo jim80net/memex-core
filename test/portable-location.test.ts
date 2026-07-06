@@ -115,7 +115,7 @@ describe("portable-location", () => {
     const registry = fixtureRegistry();
     const file = "/home/user/project/.grok/memories/note.md";
     const base = encodePortableLocation(registry, file);
-    expect(base).toBe("memex://memory-unclassified-0/note.md");
+    expect(base).toBe("memex://memory-unclassified-f87226b1/note.md");
     const handle = `${base}#${encodeFragment("Part#Two")}`;
     const { body, fragment } = splitPortableHandle(handle);
     expect(fragment).toBe("Part#Two");
@@ -151,6 +151,21 @@ describe("portable-location", () => {
     expect(() =>
       decodePortableLocation(registry, "memex://grok-project/../../outside/SKILL.md"),
     ).toThrow(/escapes scan root/);
+  });
+
+  it("does not misclassify .grokfoo paths as grok-global", () => {
+    const grokfoo = "/x/.grokfoo/skills";
+    const registry = buildScanRoots(
+      {
+        ...FIXTURE_CTX,
+        globalSkillsDirs: [grokfoo, "/home/user/.grok/skills"],
+      },
+      { skillDirs: [grokfoo, "/home/user/.grok/skills"], memoryDirs: [], ruleDirs: [] },
+    );
+    const grokfooHandle = encodePortableLocation(registry, join(grokfoo, "x/SKILL.md"));
+    const realGrok = encodePortableLocation(registry, "/home/user/.grok/skills/y/SKILL.md");
+    expect(grokfooHandle).toMatch(/^memex:\/\/skill-unclassified-/);
+    expect(realGrok).toBe("memex://grok-global/y/SKILL.md");
   });
 
   it("rootKeys are lowercase-canonical", () => {

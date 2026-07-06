@@ -2,6 +2,7 @@ import { mkdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { saveCache } from "../src/cache.ts";
 import { DEFAULT_CORE_CONFIG } from "../src/config.ts";
 import type { EmbeddingProvider } from "../src/embeddings.ts";
 import { cosineSimilarity } from "../src/embeddings.ts";
@@ -664,6 +665,81 @@ Always use pnpm for all package management.`,
     expect(weatherResults).toHaveLength(1);
     expect(weatherResults[0].score).toBeCloseTo(1.0); // the higher-scoring copy
     expect(results).toHaveLength(2); // weather + git
+  });
+
+  it("survives orphaned v3 cache keys when registry loses a root", async () => {
+    const skillsDir = join(testDir, "skills");
+    const syncSkillsDir = join(testDir, "sync", "skills");
+    await mkdir(join(syncSkillsDir, "orphaned"), { recursive: true });
+    await writeFile(
+      join(syncSkillsDir, "orphaned", "SKILL.md"),
+      `---\nname: orphaned\ndescription: sync-only skill\n---\nbody`,
+    );
+
+    const registryWithSync = buildScanRoots(
+      {
+        cwd: testDir,
+        harness: "grok",
+        syncEnabled: true,
+        syncRepoDir: join(testDir, "sync"),
+        globalSkillsDirs: [skillsDir],
+        globalRulesDirs: [],
+        projectSkillsDir: join(testDir, ".grok", "skills"),
+        projectRulesDir: join(testDir, ".grok", "rules"),
+      },
+      { skillDirs: [skillsDir, syncSkillsDir], memoryDirs: [], ruleDirs: [] },
+    );
+
+    mockEmbed.mockResolvedValueOnce(makeEmbeddings(3));
+
+    const warn = vi.fn();
+    const index1 = new SkillIndex({ ...DEFAULT_CORE_CONFIG }, mockProvider, cachePath, {
+      registry: registryWithSync,
+      warn,
+    });
+    await index1.build({ skillDirs: [skillsDir, syncSkillsDir], memoryDirs: [], ruleDirs: [] });
+    expect(index1.skillCount).toBe(3);
+
+    const registryNoSync = buildScanRoots(
+      {
+        cwd: testDir,
+        harness: "grok",
+        syncEnabled: false,
+        globalSkillsDirs: [skillsDir],
+        globalRulesDirs: [],
+        projectSkillsDir: join(testDir, ".grok", "skills"),
+        projectRulesDir: join(testDir, ".grok", "rules"),
+      },
+      { skillDirs: [skillsDir], memoryDirs: [], ruleDirs: [] },
+    );
+
+    // Seed v3 cache with an orphaned sync-skills key (registry no longer has that root)
+    await saveCache(cachePath, {
+      version: 3,
+      embeddingModel: DEFAULT_CORE_CONFIG.embeddingModel,
+      skills: {
+        "memex://sync-skills/orphaned/SKILL.md": {
+          name: "orphaned",
+          description: "sync-only skill",
+          queries: ["sync-only skill"],
+          embeddings: [[1, 0, 0, 0]],
+          mtime: 1,
+          type: "skill",
+        },
+      },
+    });
+
+    mockEmbed.mockResolvedValueOnce(makeEmbeddings(2));
+    const index2 = new SkillIndex({ ...DEFAULT_CORE_CONFIG }, mockProvider, cachePath, {
+      registry: registryNoSync,
+      warn,
+    });
+
+    await expect(
+      index2.build({ skillDirs: [skillsDir], memoryDirs: [], ruleDirs: [] }),
+    ).resolves.toBeUndefined();
+    expect(index2.skillCount).toBe(2);
+    expect(warn).toHaveBeenCalledWith(expect.stringContaining("sync-skills"));
   });
 
   it("stores portable memex:// handles when registry is configured", async () => {

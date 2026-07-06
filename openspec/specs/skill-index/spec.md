@@ -146,7 +146,9 @@ When `SkillIndex` is constructed with a `registry` of labeled scan roots, `build
 
 ### Requirement: readSkillContent returns bodies without frontmatter and resolves memory section references
 
-`SkillIndex.readSkillContent(location)` SHALL read the body content for an indexed location. It SHALL accept portable `memex://` handles and, for one release, legacy absolute paths with a deprecation warning. For ordinary skill or rule files, it SHALL strip frontmatter and return the trimmed body. For memory section references, it SHALL split fragments with `lastIndexOf("#")`, decode `%23` in section names, reparse the memory file, and return the trimmed body for the matching section, or an empty string when the section is not found.
+`SkillIndex.readSkillContent(location)` SHALL read the body content for an indexed location. It SHALL accept portable `memex://` handles and, for one release, legacy absolute paths with a deprecation warning. Adapter agent-facing read tools (Phase 2) SHALL call `resolvePortableLocation` with `allowAbsolute: false` so untrusted absolute paths cannot bypass containment.
+
+When resolving cached portable handles during `build()`, unresolvable stored keys (e.g. registry changed and a root disappeared) SHALL be skipped-with-warning and removed from the cache — never fatal to the whole index. For ordinary skill or rule files, it SHALL strip frontmatter and return the trimmed body. For memory section references, it SHALL split fragments with `lastIndexOf("#")`, decode `%23` in section names, reparse the memory file, and return the trimmed body for the matching section, or an empty string when the section is not found.
 
 #### Scenario: Reading a normal skill strips frontmatter
 

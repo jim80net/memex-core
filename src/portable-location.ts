@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { join, relative, resolve, sep } from "node:path";
 import type { ScanDirs } from "./skill-index.js";
 
@@ -77,6 +78,16 @@ function matchRoot(registry: ScanRootRegistry, filePath: string): ScanRoot | und
   return registry.find((r) => isPathContained(r.rootPath, normalized));
 }
 
+function pathHasSegment(resolvedPath: string, segment: string): boolean {
+  return resolve(resolvedPath).split(sep).includes(segment);
+}
+
+/** Stable fallback rootKey from normalized absolute dir path (§4.4 path-hash option). */
+export function stableUnclassifiedKey(kind: "skill" | "rule" | "memory", dir: string): string {
+  const hash = createHash("sha256").update(resolve(dir)).digest("hex").slice(0, 8);
+  return `${kind}-unclassified-${hash}`;
+}
+
 /**
  * Build labeled scan roots from harness context and scan directory spec.
  * Same semantic root MUST use the same rootKey on every host (normative catalog).
@@ -96,13 +107,13 @@ export function buildScanRoots(ctx: ScanRootContext, spec: ScanRootSpec): ScanRo
   const globalSkillKeys = new Map<string, string>();
   for (const dir of ctx.globalSkillsDirs) {
     const resolved = resolve(dir);
-    if (resolved.includes(`${sep}.grok${sep}`) || dir.includes(".grok")) {
+    if (pathHasSegment(resolved, ".grok")) {
       globalSkillKeys.set(resolved, "grok-global");
-    } else if (resolved.includes(`${sep}.claude${sep}`) || dir.includes(".claude")) {
+    } else if (pathHasSegment(resolved, ".claude")) {
       globalSkillKeys.set(resolved, "claude-global");
-    } else if (resolved.includes(`${sep}.codex${sep}`) || dir.includes(".codex")) {
+    } else if (pathHasSegment(resolved, ".codex")) {
       globalSkillKeys.set(resolved, "codex-global");
-    } else if (resolved.includes(`${sep}.hermes${sep}`) || dir.includes(".hermes")) {
+    } else if (pathHasSegment(resolved, ".hermes")) {
       globalSkillKeys.set(resolved, "hermes-global");
     }
   }
@@ -110,13 +121,13 @@ export function buildScanRoots(ctx: ScanRootContext, spec: ScanRootSpec): ScanRo
   const globalRuleKeys = new Map<string, string>();
   for (const dir of ctx.globalRulesDirs) {
     const resolved = resolve(dir);
-    if (resolved.includes(".grok") || dir.includes(".grok")) {
+    if (pathHasSegment(resolved, ".grok")) {
       globalRuleKeys.set(resolved, "grok-rules-global");
-    } else if (resolved.includes(".claude") || dir.includes(".claude")) {
+    } else if (pathHasSegment(resolved, ".claude")) {
       globalRuleKeys.set(resolved, "claude-rules-global");
-    } else if (resolved.includes(".codex") || dir.includes(".codex")) {
+    } else if (pathHasSegment(resolved, ".codex")) {
       globalRuleKeys.set(resolved, "codex-rules-global");
-    } else if (resolved.includes(".hermes") || dir.includes(".hermes")) {
+    } else if (pathHasSegment(resolved, ".hermes")) {
       globalRuleKeys.set(resolved, "hermes-rules-global");
     }
   }
@@ -143,12 +154,8 @@ export function buildScanRoots(ctx: ScanRootContext, spec: ScanRootSpec): ScanRo
     }
   }
 
-  const sortedUnclassifiedSkills = [...unclassifiedSkillDirs]
-    .map((d) => resolve(d))
-    .sort()
-    .map((resolved) => unclassifiedSkillDirs.find((d) => resolve(d) === resolved)!);
-  for (let i = 0; i < sortedUnclassifiedSkills.length; i++) {
-    add(`skill-unclassified-${i}`, sortedUnclassifiedSkills[i]);
+  for (const dir of unclassifiedSkillDirs) {
+    add(stableUnclassifiedKey("skill", dir), dir);
   }
 
   const unclassifiedRuleDirs: string[] = [];
@@ -166,18 +173,12 @@ export function buildScanRoots(ctx: ScanRootContext, spec: ScanRootSpec): ScanRo
     }
   }
 
-  const sortedUnclassifiedRules = [...unclassifiedRuleDirs]
-    .map((d) => resolve(d))
-    .sort()
-    .map((resolved) => unclassifiedRuleDirs.find((d) => resolve(d) === resolved)!);
-  for (let i = 0; i < sortedUnclassifiedRules.length; i++) {
-    add(`rule-unclassified-${i}`, sortedUnclassifiedRules[i]);
+  for (const dir of unclassifiedRuleDirs) {
+    add(stableUnclassifiedKey("rule", dir), dir);
   }
 
-  const sortedMemoryDirs = [...spec.memoryDirs].map((d) => resolve(d)).sort();
-  for (let i = 0; i < sortedMemoryDirs.length; i++) {
-    const dir = spec.memoryDirs.find((d) => resolve(d) === sortedMemoryDirs[i])!;
-    add(`memory-unclassified-${i}`, dir);
+  for (const dir of spec.memoryDirs) {
+    add(stableUnclassifiedKey("memory", dir), dir);
   }
 
   return sortRegistry(roots);
@@ -243,7 +244,11 @@ export function decodePortableLocation(registry: ScanRootRegistry, handle: strin
   return fragment ? `${absolute}#${fragment}` : absolute;
 }
 
-/** Resolve portable handle or legacy absolute path to absolute for filesystem I/O. */
+/**
+ * Resolve portable handle or legacy absolute path to absolute for filesystem I/O.
+ * Phase 2: agent-facing read tools MUST pass `allowAbsolute: false` so untrusted
+ * absolute paths cannot bypass containment (memex-grok#19 closes only then).
+ */
 export function resolvePortableLocation(
   registry: ScanRootRegistry,
   input: string,

@@ -20,6 +20,7 @@ export {
   HANDLE_PREFIX,
   resolvePortableLocation,
   splitPortableHandle,
+  stableUnclassifiedKey,
 } from "./portable-location.js";
 export * from "./project-mapping.js";
 export * from "./project-registry.js";

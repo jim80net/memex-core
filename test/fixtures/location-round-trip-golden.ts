@@ -16,8 +16,8 @@ export const LOCATION_ROUND_TRIP_GOLDEN = [
     handle: "memex://sync-skills/weather/SKILL.md",
   },
   {
-    label: "unclassified extra dir (stable index 0)",
+    label: "unclassified extra dir (path-hash stable)",
     absolute: "/opt/extra/skills/custom/SKILL.md",
-    handle: "memex://skill-unclassified-0/custom/SKILL.md",
+    handle: "memex://skill-unclassified-067ae16e/custom/SKILL.md",
   },
 ] as const;

@@ -297,7 +297,7 @@ export class SkillIndex {
     return encodePortableLocation(this.registry, absolute, (m) => this.warn(m));
   }
 
-  /** Absolute path used for mtime tracking (scan truth). */
+  /** Absolute path used for mtime tracking (scan truth). Fail-closed — agent read paths only. */
   private mtimeKeyFromStored(stored: string): string {
     if (!this.registry) {
       const hash = stored.indexOf("#");
@@ -309,6 +309,20 @@ export class SkillIndex {
     }
     const hash = body.indexOf("#");
     return hash === -1 ? body : body.slice(0, hash);
+  }
+
+  /**
+   * Cache-key decode — fail-open. Orphaned handles (registry changed) return null
+   * so build() skips/re-embeds instead of bricking the whole index.
+   */
+  private mtimeKeyFromStoredSafe(stored: string): string | null {
+    try {
+      return this.mtimeKeyFromStored(stored);
+    } catch (err) {
+      const reason = err instanceof Error ? err.message : String(err);
+      this.warn(`skipped unresolvable cached handle ${stored} — ${reason}`);
+      return null;
+    }
   }
 
   private memorySectionPrefix(absoluteFile: string): string | null {
@@ -338,8 +352,13 @@ export class SkillIndex {
       // Hydrate from cache on cold start
       if (this.skills.length === 0 && Object.keys(this.cache.skills).length > 0) {
         for (const [location, cached] of Object.entries(this.cache.skills)) {
+          const mtimeKey = this.mtimeKeyFromStoredSafe(location);
+          if (mtimeKey === null) {
+            delete this.cache.skills[location];
+            continue;
+          }
           this.skills.push(fromCachedSkill(location, cached));
-          this.skillMtimes.set(this.mtimeKeyFromStored(location), cached.mtime);
+          this.skillMtimes.set(mtimeKey, cached.mtime);
         }
       }
     }
@@ -488,14 +507,15 @@ export class SkillIndex {
 
     // Remove deleted entries (handle memory section keys)
     this.skills = this.skills.filter((s) => {
-      const baseLocation = this.mtimeKeyFromStored(s.location);
+      const baseLocation = this.mtimeKeyFromStoredSafe(s.location);
+      if (baseLocation === null) return false;
       return currentLocations.has(baseLocation);
     });
 
     if (this.cache) {
       for (const key of Object.keys(this.cache.skills)) {
-        const baseKey = this.mtimeKeyFromStored(key);
-        if (!currentLocations.has(baseKey)) {
+        const baseKey = this.mtimeKeyFromStoredSafe(key);
+        if (baseKey === null || !currentLocations.has(baseKey)) {
           delete this.cache.skills[key];
         }
       }
