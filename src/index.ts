@@ -3,10 +3,34 @@ export * from "./config.js";
 export * from "./embeddings.js";
 export * from "./file-lock.js";
 export * from "./path-encoder.js";
+export type {
+  HarnessKind,
+  PortableLocationWarn,
+  ResolvedPortableLocation,
+  ScanRoot,
+  ScanRootContext,
+  ScanRootRegistry,
+  ScanRootSpec,
+} from "./portable-location.js";
+export {
+  buildScanRoots,
+  decodeFragment,
+  decodePortableLocation,
+  decodePortableLocationResolved,
+  encodeFragment,
+  encodePortableLocation,
+  escapePortableText,
+  HANDLE_PREFIX,
+  resolvePortableLocation,
+  resolvePortableLocationResolved,
+  splitPortableHandle,
+  stableUnclassifiedKey,
+  unescapePortableText,
+} from "./portable-location.js";
 export * from "./project-mapping.js";
 export * from "./project-registry.js";
 export * from "./session.js";
-export type { ScanDirs } from "./skill-index.js";
+export type { ScanDirs, SkillIndexOptions } from "./skill-index.js";
 export { parseFrontmatter, parseMemoryFile, SkillIndex } from "./skill-index.js";
 export {
   autoResolveMarkdownConflict,

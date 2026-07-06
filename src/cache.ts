@@ -3,7 +3,7 @@ import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import { dirname } from "node:path";
 import type { CacheData, CachedSkill, IndexedSkill } from "./types.js";
 
-const CACHE_VERSION = 2 as const;
+const CACHE_VERSION = 3 as const;
 
 export async function loadCache(cachePath: string, embeddingModel: string): Promise<CacheData> {
   const empty: CacheData = { version: CACHE_VERSION, embeddingModel, skills: {} };

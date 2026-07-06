@@ -3,6 +3,16 @@ import { basename, join } from "node:path";
 import { fromCachedSkill, loadCache, saveCache, toCachedSkill } from "./cache.js";
 import type { EmbeddingProvider } from "./embeddings.js";
 import { cosineSimilarity } from "./embeddings.js";
+import {
+  decodePortableLocation,
+  encodeFragment,
+  encodePortableLocation,
+  HANDLE_PREFIX,
+  type PortableLocationWarn,
+  resolvePortableLocationResolved,
+  type ScanRootRegistry,
+  splitPortableHandle,
+} from "./portable-location.js";
 import type {
   CacheData,
   IndexedSkill,
@@ -238,6 +248,11 @@ export type ScanDirs = {
   ruleDirs: string[];
 };
 
+export type SkillIndexOptions = {
+  registry?: ScanRootRegistry;
+  warn?: PortableLocationWarn;
+};
+
 // ---------------------------------------------------------------------------
 // SkillIndex
 // ---------------------------------------------------------------------------
@@ -265,7 +280,55 @@ export class SkillIndex {
     private config: MemexCoreConfig,
     private provider: EmbeddingProvider,
     private cachePath: string,
+    private options: SkillIndexOptions = {},
   ) {}
+
+  private get registry(): ScanRootRegistry | undefined {
+    return this.options.registry;
+  }
+
+  private warn(msg: string): void {
+    this.options.warn?.(msg);
+  }
+
+  /** Map absolute scan path to persisted location (portable handle or absolute). */
+  private toStoredLocation(absolute: string): string | null {
+    if (!this.registry) return absolute;
+    return encodePortableLocation(this.registry, absolute, (m) => this.warn(m));
+  }
+
+  /** Absolute path used for mtime tracking (scan truth). Fail-closed — agent read paths only. */
+  private mtimeKeyFromStored(stored: string): string {
+    if (!this.registry) {
+      const hash = stored.indexOf("#");
+      return hash === -1 ? stored : stored.slice(0, hash);
+    }
+    const { body } = splitPortableHandle(stored);
+    if (body.startsWith(HANDLE_PREFIX)) {
+      return decodePortableLocation(this.registry, body);
+    }
+    const hash = body.indexOf("#");
+    return hash === -1 ? body : body.slice(0, hash);
+  }
+
+  /**
+   * Cache-key decode — fail-open. Orphaned handles (registry changed) return null
+   * so build() skips/re-embeds instead of bricking the whole index.
+   */
+  private mtimeKeyFromStoredSafe(stored: string): string | null {
+    try {
+      return this.mtimeKeyFromStored(stored);
+    } catch (err) {
+      const reason = err instanceof Error ? err.message : String(err);
+      this.warn(`skipped unresolvable cached handle ${stored} — ${reason}`);
+      return null;
+    }
+  }
+
+  private memorySectionPrefix(absoluteFile: string): string | null {
+    const base = this.toStoredLocation(absoluteFile);
+    return base ? `${base}#` : null;
+  }
 
   get skillCount(): number {
     return this.skills.length;
@@ -289,8 +352,13 @@ export class SkillIndex {
       // Hydrate from cache on cold start
       if (this.skills.length === 0 && Object.keys(this.cache.skills).length > 0) {
         for (const [location, cached] of Object.entries(this.cache.skills)) {
+          const mtimeKey = this.mtimeKeyFromStoredSafe(location);
+          if (mtimeKey === null) {
+            delete this.cache.skills[location];
+            continue;
+          }
           this.skills.push(fromCachedSkill(location, cached));
-          this.skillMtimes.set(location, cached.mtime);
+          this.skillMtimes.set(mtimeKey, cached.mtime);
         }
       }
     }
@@ -351,16 +419,20 @@ export class SkillIndex {
     const toEmbed: ToEmbed[] = [];
 
     for (const info of statResults) {
+      const storedLocation = this.toStoredLocation(info.location);
+      if (storedLocation === null) continue;
+
       if (info.kind === "memory") {
-        // Memory files may produce multiple sections — each keyed as "path#SectionName"
         const cachedMtime = this.skillMtimes.get(info.location);
         if (cachedMtime === info.mtime) continue;
 
-        // Remove old sections for this memory file
-        this.skills = this.skills.filter((s) => !s.location.startsWith(`${info.location}#`));
-        if (this.cache) {
-          for (const key of Object.keys(this.cache.skills)) {
-            if (key.startsWith(`${info.location}#`)) delete this.cache.skills[key];
+        const sectionPrefix = this.memorySectionPrefix(info.location);
+        if (sectionPrefix) {
+          this.skills = this.skills.filter((s) => !s.location.startsWith(sectionPrefix));
+          if (this.cache) {
+            for (const key of Object.keys(this.cache.skills)) {
+              if (key.startsWith(sectionPrefix)) delete this.cache.skills[key];
+            }
           }
         }
 
@@ -374,30 +446,27 @@ export class SkillIndex {
         continue;
       }
 
-      // Skills and rules
-      const cached = this.cache?.skills[info.location];
+      const cached = this.cache?.skills[storedLocation];
       if (cached && cached.mtime === info.mtime) {
-        // Use cached embeddings — no re-embed
-        const existing = this.skills.findIndex((s) => s.location === info.location);
-        const skill = fromCachedSkill(info.location, cached);
+        const existing = this.skills.findIndex((s) => s.location === storedLocation);
+        const skill = fromCachedSkill(storedLocation, cached);
         if (existing >= 0) this.skills[existing] = skill;
-        else if (!this.skills.some((s) => s.location === info.location)) this.skills.push(skill);
+        else if (!this.skills.some((s) => s.location === storedLocation)) this.skills.push(skill);
         this.skillMtimes.set(info.location, info.mtime);
         continue;
       }
 
-      // Check in-memory cache
       const unchanged =
         this.skillMtimes.get(info.location) === info.mtime &&
-        this.skills.some((s) => s.location === info.location);
+        this.skills.some((s) => s.location === storedLocation);
       if (unchanged) continue;
 
       try {
         const raw = await readFile(info.location, "utf-8");
         if (info.kind === "rule") {
-          this.parseRuleFileForEmbed(raw, info, toEmbed);
+          this.parseRuleFileForEmbed(raw, info, toEmbed, storedLocation);
         } else {
-          this.parseSkillFileForEmbed(raw, info, toEmbed);
+          this.parseSkillFileForEmbed(raw, info, toEmbed, storedLocation);
         }
       } catch {
         // Skip unreadable files
@@ -436,17 +505,17 @@ export class SkillIndex {
       }
     }
 
-    // Remove deleted entries (handle memory section keys like "path#SectionName")
+    // Remove deleted entries (handle memory section keys)
     this.skills = this.skills.filter((s) => {
-      const baseLocation = s.location.includes("#") ? s.location.split("#")[0] : s.location;
-      return currentLocations.has(baseLocation) || currentLocations.has(s.location);
+      const baseLocation = this.mtimeKeyFromStoredSafe(s.location);
+      if (baseLocation === null) return false;
+      return currentLocations.has(baseLocation);
     });
 
-    // Clean cache of deleted entries
     if (this.cache) {
       for (const key of Object.keys(this.cache.skills)) {
-        const baseKey = key.includes("#") ? key.split("#")[0] : key;
-        if (!currentLocations.has(baseKey) && !currentLocations.has(key)) {
+        const baseKey = this.mtimeKeyFromStoredSafe(key);
+        if (baseKey === null || !currentLocations.has(baseKey)) {
           delete this.cache.skills[key];
         }
       }
@@ -522,15 +591,24 @@ export class SkillIndex {
    * Read the body content of a skill file, stripping frontmatter.
    */
   async readSkillContent(location: string): Promise<string> {
-    if (location.includes("#")) {
-      const [filePath, sectionName] = location.split("#", 2);
+    const trimmed = location.trim();
+    const { filePath, sectionName } = this.registry
+      ? resolvePortableLocationResolved(this.registry, trimmed, { warn: (m) => this.warn(m) })
+      : (() => {
+          const { body, fragment } = splitPortableHandle(trimmed);
+          return fragment !== undefined
+            ? { filePath: body, sectionName: fragment }
+            : { filePath: body };
+        })();
+
+    if (sectionName !== undefined) {
       const raw = await readFile(filePath, "utf-8");
       const sections = parseMemoryFile(raw, filePath);
       const section = sections.find((s) => s.name === sectionName);
       return section?.body.trim() || "";
     }
 
-    const raw = await readFile(location, "utf-8");
+    const raw = await readFile(filePath, "utf-8");
     const { body } = parseFrontmatter(raw);
     return body.trim();
   }
@@ -543,6 +621,7 @@ export class SkillIndex {
     raw: string,
     info: { location: string; mtime: number },
     toEmbed: ToEmbed[],
+    storedLocation: string,
   ): void {
     const { meta, body } = parseFrontmatter(raw);
     if (!meta.name || !meta.description) return;
@@ -551,7 +630,7 @@ export class SkillIndex {
     toEmbed.push({
       name: meta.name,
       description: meta.description,
-      location: info.location,
+      location: storedLocation,
       queries,
       type,
       mtime: info.mtime,
@@ -566,9 +645,11 @@ export class SkillIndex {
     info: { location: string; mtime: number },
     toEmbed: ToEmbed[],
   ): void {
+    const baseStored = this.toStoredLocation(info.location);
+    if (!baseStored) return;
     const sections = parseMemoryFile(raw, info.location);
     for (const section of sections) {
-      const key = `${info.location}#${section.name}`;
+      const key = `${baseStored}#${encodeFragment(section.name)}`;
       const queries = section.queries.length > 0 ? section.queries : [section.description];
       toEmbed.push({
         name: section.name,
@@ -586,6 +667,7 @@ export class SkillIndex {
     raw: string,
     info: { location: string; mtime: number },
     toEmbed: ToEmbed[],
+    storedLocation: string,
   ): void {
     const { meta, body } = parseFrontmatter(raw);
 
@@ -601,7 +683,7 @@ export class SkillIndex {
     toEmbed.push({
       name,
       description,
-      location: info.location,
+      location: storedLocation,
       queries,
       type: "rule",
       mtime: info.mtime,

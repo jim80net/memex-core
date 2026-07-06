@@ -2,9 +2,15 @@ import { mkdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { saveCache } from "../src/cache.ts";
 import { DEFAULT_CORE_CONFIG } from "../src/config.ts";
 import type { EmbeddingProvider } from "../src/embeddings.ts";
 import { cosineSimilarity } from "../src/embeddings.ts";
+import {
+  buildScanRoots,
+  encodeFragment,
+  encodePortableLocation,
+} from "../src/portable-location.ts";
 import type { ScanDirs } from "../src/skill-index.ts";
 import { parseFrontmatter, parseMemoryFile, SkillIndex } from "../src/skill-index.ts";
 
@@ -663,6 +669,310 @@ Always use pnpm for all package management.`,
     expect(weatherResults).toHaveLength(1);
     expect(weatherResults[0].score).toBeCloseTo(1.0); // the higher-scoring copy
     expect(results).toHaveLength(2); // weather + git
+  });
+
+  it("survives orphaned v3 cache keys when registry loses a root", async () => {
+    const skillsDir = join(testDir, "skills");
+    const syncSkillsDir = join(testDir, "sync", "skills");
+    await mkdir(join(syncSkillsDir, "orphaned"), { recursive: true });
+    await writeFile(
+      join(syncSkillsDir, "orphaned", "SKILL.md"),
+      `---\nname: orphaned\ndescription: sync-only skill\n---\nbody`,
+    );
+
+    const registryWithSync = buildScanRoots(
+      {
+        cwd: testDir,
+        harness: "grok",
+        syncEnabled: true,
+        syncRepoDir: join(testDir, "sync"),
+        globalSkillsDirs: [skillsDir],
+        globalRulesDirs: [],
+        projectSkillsDir: join(testDir, ".grok", "skills"),
+        projectRulesDir: join(testDir, ".grok", "rules"),
+      },
+      { skillDirs: [skillsDir, syncSkillsDir], memoryDirs: [], ruleDirs: [] },
+    );
+
+    mockEmbed.mockResolvedValueOnce(makeEmbeddings(3));
+
+    const warn = vi.fn();
+    const index1 = new SkillIndex({ ...DEFAULT_CORE_CONFIG }, mockProvider, cachePath, {
+      registry: registryWithSync,
+      warn,
+    });
+    await index1.build({ skillDirs: [skillsDir, syncSkillsDir], memoryDirs: [], ruleDirs: [] });
+    expect(index1.skillCount).toBe(3);
+
+    const registryNoSync = buildScanRoots(
+      {
+        cwd: testDir,
+        harness: "grok",
+        syncEnabled: false,
+        globalSkillsDirs: [skillsDir],
+        globalRulesDirs: [],
+        projectSkillsDir: join(testDir, ".grok", "skills"),
+        projectRulesDir: join(testDir, ".grok", "rules"),
+      },
+      { skillDirs: [skillsDir], memoryDirs: [], ruleDirs: [] },
+    );
+
+    // Seed v3 cache with an orphaned sync-skills key (registry no longer has that root)
+    await saveCache(cachePath, {
+      version: 3,
+      embeddingModel: DEFAULT_CORE_CONFIG.embeddingModel,
+      skills: {
+        "memex://sync-skills/orphaned/SKILL.md": {
+          name: "orphaned",
+          description: "sync-only skill",
+          queries: ["sync-only skill"],
+          embeddings: [[1, 0, 0, 0]],
+          mtime: 1,
+          type: "skill",
+        },
+      },
+    });
+
+    mockEmbed.mockResolvedValueOnce(makeEmbeddings(2));
+    const index2 = new SkillIndex({ ...DEFAULT_CORE_CONFIG }, mockProvider, cachePath, {
+      registry: registryNoSync,
+      warn,
+    });
+
+    await expect(
+      index2.build({ skillDirs: [skillsDir], memoryDirs: [], ruleDirs: [] }),
+    ).resolves.toBeUndefined();
+    expect(index2.skillCount).toBe(2);
+    expect(warn).toHaveBeenCalledWith(expect.stringContaining("sync-skills"));
+  });
+
+  it("readSkillContent resolves portable memory sections with hash in name", async () => {
+    const memoryDir = join(testDir, "memory");
+    await mkdir(memoryDir, { recursive: true });
+    await writeFile(
+      join(memoryDir, "note.md"),
+      `## Part#Two
+Description for section with hash.
+
+Section body with a literal hash in the name.`,
+    );
+
+    const registry = buildScanRoots(
+      {
+        cwd: testDir,
+        harness: "grok",
+        globalSkillsDirs: [join(testDir, "skills")],
+        globalRulesDirs: [],
+        projectSkillsDir: join(testDir, ".grok", "skills"),
+        projectRulesDir: join(testDir, ".grok", "rules"),
+      },
+      { skillDirs: [join(testDir, "skills")], memoryDirs: [memoryDir], ruleDirs: [] },
+    );
+
+    mockEmbed.mockResolvedValueOnce(makeEmbeddings(1));
+
+    const index = new SkillIndex({ ...DEFAULT_CORE_CONFIG }, mockProvider, cachePath, { registry });
+    await index.build({
+      skillDirs: [join(testDir, "skills")],
+      memoryDirs: [memoryDir],
+      ruleDirs: [],
+    });
+
+    const memoryFile = join(memoryDir, "note.md");
+    const baseHandle = encodePortableLocation(registry, memoryFile);
+    expect(baseHandle).not.toBeNull();
+    const location = `${baseHandle}#${encodeFragment("Part#Two")}`;
+
+    const content = await index.readSkillContent(location);
+    expect(content).toContain("Section body with a literal hash in the name.");
+  });
+
+  it("readSkillContent round-trips memory section names containing hash", async () => {
+    const memDir = join(testDir, "memories");
+    await mkdir(memDir, { recursive: true });
+    await writeFile(
+      join(memDir, "note.md"),
+      `## Part#Two
+Section body with hash in name.
+
+Triggers: "hash section"
+`,
+    );
+
+    const registry = buildScanRoots(
+      {
+        cwd: testDir,
+        harness: "grok",
+        globalSkillsDirs: [join(testDir, "skills")],
+        globalRulesDirs: [],
+        projectSkillsDir: join(testDir, ".grok", "skills"),
+        projectRulesDir: join(testDir, ".grok", "rules"),
+      },
+      {
+        skillDirs: [join(testDir, "skills")],
+        memoryDirs: [memDir],
+        ruleDirs: [],
+      },
+    );
+
+    mockEmbed.mockResolvedValueOnce(makeEmbeddings(3)).mockResolvedValueOnce([[1, 0, 0, 0]]);
+
+    const index = new SkillIndex({ ...DEFAULT_CORE_CONFIG }, mockProvider, cachePath, { registry });
+    await index.build({
+      skillDirs: [join(testDir, "skills")],
+      memoryDirs: [memDir],
+      ruleDirs: [],
+    });
+
+    const results = await index.search("hash section", 3, 0.0);
+    const hit = results.find((r) => r.skill.name === "Part#Two");
+    expect(hit).toBeDefined();
+    expect(hit!.skill.location).toContain("%23");
+
+    const content = await index.readSkillContent(hit!.skill.location);
+    expect(content).toContain("Section body with hash in name");
+  });
+
+  it("escape grammar matrix: index → search → readSkillContent", async () => {
+    const memoryDir = join(testDir, "memory");
+    const sharpDir = join(testDir, "skills", "c#sharp");
+    await mkdir(memoryDir, { recursive: true });
+    await mkdir(sharpDir, { recursive: true });
+    await writeFile(
+      join(memoryDir, "note.md"),
+      `## Part#Two
+Hash section body.
+
+Triggers: "hash section"
+
+## A%23B
+Percent-encoded section body.
+
+Triggers: "percent section"
+
+## 100% done
+Percent sign section body.
+
+Triggers: "percent sign"
+`,
+    );
+    await writeFile(
+      join(sharpDir, "SKILL.md"),
+      `---\nname: sharp-skill\ndescription: Skill under c#sharp dir\n---\nSharp dir body.`,
+    );
+
+    const skillsDir = join(testDir, "skills");
+    const registry = buildScanRoots(
+      {
+        cwd: testDir,
+        harness: "grok",
+        globalSkillsDirs: [skillsDir],
+        globalRulesDirs: [],
+        projectSkillsDir: join(testDir, ".grok", "skills"),
+        projectRulesDir: join(testDir, ".grok", "rules"),
+      },
+      { skillDirs: [skillsDir], memoryDirs: [memoryDir], ruleDirs: [] },
+    );
+
+    // 3 skills + 3 memory sections = 6 embeddings; uniform vectors so search hits by name
+    const uniform = Array.from({ length: 6 }, () => [1, 0, 0, 0] as number[]);
+    mockEmbed
+      .mockResolvedValueOnce(uniform)
+      .mockResolvedValueOnce([[1, 0, 0, 0]])
+      .mockResolvedValueOnce([[1, 0, 0, 0]])
+      .mockResolvedValueOnce([[1, 0, 0, 0]])
+      .mockResolvedValueOnce([[1, 0, 0, 0]]);
+
+    const withRegistry = new SkillIndex({ ...DEFAULT_CORE_CONFIG }, mockProvider, cachePath, {
+      registry,
+    });
+    await withRegistry.build({
+      skillDirs: [skillsDir],
+      memoryDirs: [memoryDir],
+      ruleDirs: [],
+    });
+
+    const hashHit = (await withRegistry.search("hash section", 10, 0.0)).find(
+      (r) => r.skill.name === "Part#Two",
+    );
+    expect(hashHit).toBeDefined();
+    expect(hashHit!.skill.location).toContain("%23");
+    expect(await withRegistry.readSkillContent(hashHit!.skill.location)).toContain(
+      "Hash section body",
+    );
+
+    const pctHit = (await withRegistry.search("percent section", 10, 0.0)).find(
+      (r) => r.skill.name === "A%23B",
+    );
+    expect(pctHit).toBeDefined();
+    expect(pctHit!.skill.location).toContain("%2523");
+    expect(await withRegistry.readSkillContent(pctHit!.skill.location)).toContain(
+      "Percent-encoded section body",
+    );
+
+    const pctSignHit = (await withRegistry.search("percent sign", 10, 0.0)).find(
+      (r) => r.skill.name === "100% done",
+    );
+    expect(pctSignHit).toBeDefined();
+    expect(pctSignHit!.skill.location).toContain("%25");
+    expect(await withRegistry.readSkillContent(pctSignHit!.skill.location)).toContain(
+      "Percent sign section body",
+    );
+
+    const sharpHit = (await withRegistry.search("sharp", 10, 0.0)).find(
+      (r) => r.skill.name === "sharp-skill",
+    );
+    expect(sharpHit).toBeDefined();
+    expect(sharpHit?.skill.location).toMatch(/c%23sharp\/SKILL\.md$/);
+    expect(await withRegistry.readSkillContent(sharpHit!.skill.location)).toContain(
+      "Sharp dir body",
+    );
+
+    // Phase-1 no-registry path: literal %23 section name must round-trip
+    mockEmbed.mockResolvedValueOnce(makeEmbeddings(3));
+    const noRegistry = new SkillIndex(
+      { ...DEFAULT_CORE_CONFIG },
+      mockProvider,
+      join(testDir, "cache2", "skill-router.json"),
+    );
+    await noRegistry.build({
+      skillDirs: [skillsDir],
+      memoryDirs: [memoryDir],
+      ruleDirs: [],
+    });
+    const absKey = `${join(memoryDir, "note.md")}#${encodeFragment("A%23B")}`;
+    expect(await noRegistry.readSkillContent(absKey)).toContain("Percent-encoded section body");
+  });
+
+  it("stores portable memex:// handles when registry is configured", async () => {
+    const skillsDir = join(testDir, "skills");
+    const registry = buildScanRoots(
+      {
+        cwd: testDir,
+        harness: "grok",
+        globalSkillsDirs: [skillsDir],
+        globalRulesDirs: [],
+        projectSkillsDir: join(testDir, ".grok", "skills"),
+        projectRulesDir: join(testDir, ".grok", "rules"),
+      },
+      { skillDirs: [skillsDir], memoryDirs: [], ruleDirs: [] },
+    );
+
+    mockEmbed.mockResolvedValueOnce(makeEmbeddings(2)).mockResolvedValueOnce([[1, 0, 0, 0]]);
+
+    const index = new SkillIndex({ ...DEFAULT_CORE_CONFIG }, mockProvider, cachePath, { registry });
+    await index.build(makeScanDirs(testDir));
+
+    const results = await index.search("weather", 3, 0.0);
+    for (const r of results) {
+      expect(r.skill.location).toMatch(/^memex:\/\//);
+      expect(r.skill.location).not.toContain(testDir);
+    }
+
+    const weather = results.find((r) => r.skill.name === "weather");
+    expect(weather).toBeDefined();
+    const content = await index.readSkillContent(weather!.skill.location);
+    expect(content).toContain("Fetch weather data");
   });
 
   it("boost affects threshold crossing", async () => {
