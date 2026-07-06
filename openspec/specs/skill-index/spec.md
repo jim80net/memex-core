@@ -121,9 +121,32 @@ During `build()`, each parsed memory section SHALL be indexed as a separate memo
 - **WHEN** `scoringMode` is `"absolute"`
 - **THEN** only results whose boosted score is at least the threshold are returned, up to `topK`
 
+### Requirement: Indexed locations are portable memex:// handles when a registry is configured
+
+When `SkillIndex` is constructed with a `registry` of labeled scan roots, `build()` SHALL persist portable `memex://{rootKey}/{posix-rel}` handles (opaque location tokens — not general URIs) as each entry's `location` and cache key. Internal mtime tracking SHALL remain keyed by absolute filesystem paths. `encodePortableLocation` SHALL fail-open (skip-with-warning) for paths outside the registry; decode and read resolution SHALL fail-closed with path-containment checks that reject `..` segments and paths escaping the matched root.
+
+#### Scenario: Registry-backed index emits portable handles
+
+- **WHEN** `SkillIndex.build(scanDirs)` runs with a scan-root registry covering the scanned directories
+- **THEN** indexed `location` values and cache keys use `memex://` handles rather than absolute host paths
+
+#### Scenario: Decode rejects traversal escapes
+
+- **WHEN** `decodePortableLocation` or `readSkillContent` receives a handle whose relative path contains `..` or resolves outside the registered root
+- **THEN** resolution fails closed and no file is read
+
+### Requirement: buildScanRoots assigns stable lowercase-canonical root keys
+
+`buildScanRoots(ctx, spec)` SHALL label scan directories using the core-owned base catalog (`sync-skills`, `sync-rules`, `{harness}-global`, `{harness}-project`, `{harness}-rules-global`, `{harness}-rules-project`) and stable `skill-unclassified-{n}`, `rule-unclassified-{n}`, and `memory-unclassified-{n}` fallbacks indexed from sorted unclassified directory lists. All `rootKey` values SHALL be lowercase.
+
+#### Scenario: Unclassified directories keep stable keys across reorder
+
+- **WHEN** unrelated scan roots are reordered but unclassified directory paths are unchanged
+- **THEN** the portable handles for entries under those unclassified directories remain the same
+
 ### Requirement: readSkillContent returns bodies without frontmatter and resolves memory section references
 
-`SkillIndex.readSkillContent(location)` SHALL read the body content for an indexed location. For ordinary skill or rule files, it SHALL strip frontmatter and return the trimmed body. For memory section references of the form `"path#SectionName"`, it SHALL reparse the memory file and return the trimmed body for the matching section, or an empty string when the section is not found.
+`SkillIndex.readSkillContent(location)` SHALL read the body content for an indexed location. It SHALL accept portable `memex://` handles and, for one release, legacy absolute paths with a deprecation warning. For ordinary skill or rule files, it SHALL strip frontmatter and return the trimmed body. For memory section references, it SHALL split fragments with `lastIndexOf("#")`, decode `%23` in section names, reparse the memory file, and return the trimmed body for the matching section, or an empty string when the section is not found.
 
 #### Scenario: Reading a normal skill strips frontmatter
 

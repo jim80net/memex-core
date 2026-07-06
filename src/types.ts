@@ -25,6 +25,7 @@ export type SkillType =
 export type IndexedSkill = {
   name: string;
   description: string;
+  /** Portable memex:// handle when a scan-root registry is configured; otherwise absolute path. */
   location: string;
   type: SkillType;
   embeddings: number[][];
@@ -58,7 +59,7 @@ export type ParsedSkill = {
 };
 
 // ---------------------------------------------------------------------------
-// Cache schema (version 2)
+// Cache schema (version 3 — portable location handles)
 // ---------------------------------------------------------------------------
 
 export type CachedSkill = {
@@ -73,7 +74,7 @@ export type CachedSkill = {
 };
 
 export type CacheData = {
-  version: 2;
+  version: 3;
   embeddingModel: string;
   skills: Record<string, CachedSkill>;
 };

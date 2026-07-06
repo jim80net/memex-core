@@ -1,13 +1,13 @@
 ## Requirements
 
-### Requirement: Cache files use schema version 2 and are keyed by embedding model
+### Requirement: Cache files use schema version 3 and are keyed by embedding model
 
-The cache schema SHALL be `{ version: 2, embeddingModel, skills }`. `loadCache(cachePath, embeddingModel)` SHALL return an empty valid cache object with `version: 2`, the requested `embeddingModel`, and an empty `skills` map when the cache file is missing, unreadable, malformed, has a different schema version, or was created for a different embedding model.
+The cache schema SHALL be `{ version: 3, embeddingModel, skills }`. Skill location keys in `skills` SHALL be portable `memex://` handles when the index is built with a scan-root registry. `loadCache(cachePath, embeddingModel)` SHALL return an empty valid cache object with `version: 3`, the requested `embeddingModel`, and an empty `skills` map when the cache file is missing, unreadable, malformed, has a different schema version, or was created for a different embedding model.
 
 #### Scenario: Missing or corrupt cache yields an empty cache
 
 - **WHEN** `loadCache(cachePath, embeddingModel)` cannot read or parse the cache file
-- **THEN** it returns `{ version: 2, embeddingModel, skills: {} }`
+- **THEN** it returns `{ version: 3, embeddingModel, skills: {} }`
 
 #### Scenario: Model mismatch invalidates the cache
 

@@ -21,7 +21,7 @@ describe("cache", () => {
 
   it("round-trips through JSON", async () => {
     const cache: CacheData = {
-      version: 2,
+      version: 3,
       embeddingModel: "text-embedding-3-small",
       skills: {
         "/path/to/skill/SKILL.md": {
@@ -41,15 +41,37 @@ describe("cache", () => {
     await saveCache(cachePath, cache);
     const loaded = await loadCache(cachePath, "text-embedding-3-small");
 
-    expect(loaded.version).toBe(2);
+    expect(loaded.version).toBe(3);
     expect(loaded.embeddingModel).toBe("text-embedding-3-small");
     expect(loaded.skills["/path/to/skill/SKILL.md"].name).toBe("test-skill");
     expect(loaded.skills["/path/to/skill/SKILL.md"].embeddings).toHaveLength(2);
   });
 
+  it("invalidates cache when schema version changes", async () => {
+    const cache = {
+      version: 2,
+      embeddingModel: "text-embedding-3-small",
+      skills: {
+        "/a": {
+          name: "a",
+          description: "a",
+          queries: [],
+          embeddings: [],
+          mtime: 0,
+          type: "skill" as const,
+        },
+      },
+    };
+    await saveCache(cachePath, cache as CacheData);
+
+    const loaded = await loadCache(cachePath, "text-embedding-3-small");
+    expect(Object.keys(loaded.skills)).toHaveLength(0);
+    expect(loaded.version).toBe(3);
+  });
+
   it("invalidates cache when model changes", async () => {
     const cache: CacheData = {
-      version: 2,
+      version: 3,
       embeddingModel: "text-embedding-3-small",
       skills: {
         "/a": { name: "a", description: "a", queries: [], embeddings: [], mtime: 0, type: "skill" },
@@ -63,7 +85,7 @@ describe("cache", () => {
 
   it("validates cache when model matches", async () => {
     const cache: CacheData = {
-      version: 2,
+      version: 3,
       embeddingModel: "text-embedding-3-small",
       skills: {
         "/a": { name: "a", description: "a", queries: [], embeddings: [], mtime: 0, type: "skill" },
@@ -77,7 +99,7 @@ describe("cache", () => {
 
   it("returns empty cache when file does not exist", async () => {
     const loaded = await loadCache(join(tmpDir, "nonexistent.json"), "model");
-    expect(loaded.version).toBe(2);
+    expect(loaded.version).toBe(3);
     expect(Object.keys(loaded.skills)).toHaveLength(0);
   });
 

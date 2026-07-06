@@ -5,6 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { DEFAULT_CORE_CONFIG } from "../src/config.ts";
 import type { EmbeddingProvider } from "../src/embeddings.ts";
 import { cosineSimilarity } from "../src/embeddings.ts";
+import { buildScanRoots } from "../src/portable-location.ts";
 import type { ScanDirs } from "../src/skill-index.ts";
 import { parseFrontmatter, parseMemoryFile, SkillIndex } from "../src/skill-index.ts";
 
@@ -663,6 +664,37 @@ Always use pnpm for all package management.`,
     expect(weatherResults).toHaveLength(1);
     expect(weatherResults[0].score).toBeCloseTo(1.0); // the higher-scoring copy
     expect(results).toHaveLength(2); // weather + git
+  });
+
+  it("stores portable memex:// handles when registry is configured", async () => {
+    const skillsDir = join(testDir, "skills");
+    const registry = buildScanRoots(
+      {
+        cwd: testDir,
+        harness: "grok",
+        globalSkillsDirs: [skillsDir],
+        globalRulesDirs: [],
+        projectSkillsDir: join(testDir, ".grok", "skills"),
+        projectRulesDir: join(testDir, ".grok", "rules"),
+      },
+      { skillDirs: [skillsDir], memoryDirs: [], ruleDirs: [] },
+    );
+
+    mockEmbed.mockResolvedValueOnce(makeEmbeddings(2)).mockResolvedValueOnce([[1, 0, 0, 0]]);
+
+    const index = new SkillIndex({ ...DEFAULT_CORE_CONFIG }, mockProvider, cachePath, { registry });
+    await index.build(makeScanDirs(testDir));
+
+    const results = await index.search("weather", 3, 0.0);
+    for (const r of results) {
+      expect(r.skill.location).toMatch(/^memex:\/\//);
+      expect(r.skill.location).not.toContain(testDir);
+    }
+
+    const weather = results.find((r) => r.skill.name === "weather");
+    expect(weather).toBeDefined();
+    const content = await index.readSkillContent(weather!.skill.location);
+    expect(content).toContain("Fetch weather data");
   });
 
   it("boost affects threshold crossing", async () => {
