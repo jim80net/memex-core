@@ -26,6 +26,14 @@
 * Git helper functions extracted from `src/sync.ts` into a new internal
   `src/git-helpers.ts` module (no API change).
 
+## [0.5.0](https://github.com/jim80net/memex-core/compare/memex-core-v0.4.0...memex-core-v0.5.0) (2026-07-06)
+
+
+### Features
+
+* **openspec:** backport existing functionality into baseline specs ([#21](https://github.com/jim80net/memex-core/issues/21)) ([ae92945](https://github.com/jim80net/memex-core/commit/ae9294548d975a0385e0317f18d5550b6b87c29e))
+* **skill-index:** portable location handles at index time ([#32](https://github.com/jim80net/memex-core/issues/32) Phase 1) ([#33](https://github.com/jim80net/memex-core/issues/33)) ([d211719](https://github.com/jim80net/memex-core/commit/d2117195c6ab22e910e12bbda0d9046525d62309))
+
 ## [0.4.0](https://github.com/jim80net/memex-core/compare/memex-core-v0.3.1...memex-core-v0.4.0) (2026-04-08)
 
 
