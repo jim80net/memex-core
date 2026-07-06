@@ -4,12 +4,12 @@ import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   buildScanRoots,
+  decodeFragment,
   decodePortableLocation,
   decodePortableLocationResolved,
   encodeFragment,
   encodePortableLocation,
   resolvePortableLocation,
-  resolvePortableLocationResolved,
   type ScanRootContext,
   splitPortableHandle,
 } from "../src/portable-location.ts";
@@ -112,17 +112,34 @@ describe("portable-location", () => {
     expect(fragment).toBe("Section#Name");
   });
 
-  it("encodeFragment escapes literal hash in section names", () => {
+  it("encodeFragment escapes hash and percent reversibly", () => {
     expect(encodeFragment("a#b")).toBe("a%23b");
+    expect(encodeFragment("A%23B")).toBe("A%2523B");
+    expect(decodeFragment(encodeFragment("Part#Two"))).toBe("Part#Two");
+    expect(decodeFragment(encodeFragment("A%23B"))).toBe("A%23B");
+  });
+
+  it("round-trips section names containing hash or percent", () => {
     const registry = fixtureRegistry();
     const file = "/home/user/project/.grok/memories/note.md";
     const base = encodePortableLocation(registry, file);
     expect(base).toBe("memex://memory-unclassified-f87226b1/note.md");
-    const handle = `${base}#${encodeFragment("Part#Two")}`;
-    const resolved = decodePortableLocationResolved(registry, handle);
-    expect(resolved.filePath).toBe(file);
-    expect(resolved.sectionName).toBe("Part#Two");
-    expect(resolvePortableLocationResolved(registry, handle).sectionName).toBe("Part#Two");
+
+    for (const sectionName of ["Part#Two", "A%23B"] as const) {
+      const handle = `${base}#${encodeFragment(sectionName)}`;
+      const resolved = decodePortableLocationResolved(registry, handle);
+      expect(resolved.filePath).toBe(file);
+      expect(resolved.sectionName).toBe(sectionName);
+    }
+  });
+
+  it("round-trips absolute paths with literal hash in directory names", () => {
+    const registry = fixtureRegistry();
+    const absolute = "/home/user/.grok/skills/c#/SKILL.md";
+    const handle = encodePortableLocation(registry, absolute);
+    expect(handle).toBe("memex://grok-global/c%23/SKILL.md");
+    expect(decodePortableLocation(registry, handle)).toBe(absolute);
+    expect(decodePortableLocationResolved(registry, handle).filePath).toBe(absolute);
   });
 
   it("resolvePortableLocation accepts absolute paths with deprecation warn", () => {

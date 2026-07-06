@@ -49,11 +49,11 @@ export function splitPortableHandle(handle: string): { body: string; fragment?: 
 }
 
 export function encodeFragment(fragment: string): string {
-  return fragment.replace(/#/g, "%23");
+  return fragment.replace(/%/g, "%25").replace(/#/g, "%23");
 }
 
 export function decodeFragment(fragment: string): string {
-  return fragment.replace(/%23/g, "#");
+  return fragment.replace(/%23/g, "#").replace(/%25/g, "%");
 }
 
 function normalizeRel(rel: string): string {
@@ -198,22 +198,23 @@ export function encodePortableLocation(
   registry: ScanRootRegistry,
   absolute: string,
   warn?: PortableLocationWarn,
+  fragment?: string,
 ): string | null {
-  const { body, fragment } = splitPortableHandle(absolute);
+  const body = resolve(absolute);
   const root = matchRoot(registry, body);
   if (!root) {
     warn?.(`skipped indexing ${absolute} — no portable handle (outside registered scan roots)`);
     return null;
   }
 
-  const rel = normalizeRel(relative(root.rootPath, resolve(body)));
+  const rel = normalizeRel(relative(root.rootPath, body));
   if (hasUnsafeRelSegments(rel)) {
     warn?.(`skipped indexing ${absolute} — no portable handle (unsafe relative path: ${rel})`);
     return null;
   }
 
-  const handle = `${HANDLE_PREFIX}${root.key}/${rel}`;
-  if (!fragment) return handle;
+  const handle = `${HANDLE_PREFIX}${root.key}/${encodeFragment(rel)}`;
+  if (fragment === undefined) return handle;
   return `${handle}#${encodeFragment(fragment)}`;
 }
 
@@ -238,7 +239,7 @@ export function decodePortableLocationResolved(
   }
 
   const key = pathBody.slice(0, slash);
-  const rel = pathBody.slice(slash + 1);
+  const rel = decodeFragment(pathBody.slice(slash + 1));
   if (hasUnsafeRelSegments(rel)) {
     throw new Error(`portable location handle escapes scan root: ${handle}`);
   }
