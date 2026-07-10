@@ -211,6 +211,117 @@ export type SyncConfig = {
 };
 
 // ---------------------------------------------------------------------------
+// Shared origin + sync profile (file-shaped projection)
+// ---------------------------------------------------------------------------
+
+/** Where origin content lives on this host. */
+export type OriginConfig = {
+  /** Absolute or `~/…` path. Empty → resolver default chain. */
+  root?: string;
+  /**
+   * Optional git remote for the origin tree (same role as SyncConfig.repo).
+   * Empty / omitted → host-local origin only.
+   */
+  repo?: string;
+};
+
+/**
+ * One harness projection target. Core is harness-agnostic: it only sees
+ * absolute directory paths + which origin subtrees to link.
+ */
+export type ProjectionTarget = {
+  /** Stable id for logs/doctor: "grok-user-rules", "claude-user-rules", … */
+  id: string;
+  /** Absolute harness directory to ensure + project into. */
+  targetDir: string;
+  /**
+   * Origin-relative source directory under origin.root
+   * e.g. "rules", "skills", "projects/github.com/jim80net/foo/memory"
+   */
+  originRelDir: string;
+  /**
+   * "files" — each matching file becomes a symlink entry
+   * "skill-dirs" — each child dir with SKILL.md is linked as a whole directory
+   */
+  entryKind: "files" | "skill-dirs";
+  /** Glob/suffix filter; default "*.md" for files, ignored for skill-dirs. */
+  pattern?: string;
+  /** When true, create targetDir if missing. Default true. */
+  initTargetDir?: boolean;
+};
+
+export type SyncProfile = {
+  /** Schema version for migrations. */
+  version: 1;
+  /** Master switch for profile-driven origin + projection. */
+  enabled: boolean;
+  origin: OriginConfig;
+  /**
+   * Projection targets. Empty array = origin-only (materialize/sync git)
+   * without symlink management.
+   */
+  projections: ProjectionTarget[];
+  /**
+   * Conflict policy when target has a non-link real file/dir.
+   * v1: only "fail-closed" is supported.
+   */
+  onClobber: "fail-closed";
+  /**
+   * When true, replace a symlink that already points inside origin.root
+   * if the origin entry moved (relink). Default true.
+   */
+  relinkManaged?: boolean;
+  /**
+   * Bridge to existing SyncConfig git pull/push behavior.
+   * If omitted, profile can still project a local-only origin.
+   */
+  sync?: Pick<SyncConfig, "autoPull" | "autoCommitPush" | "projectMappings" | "caseSensitive">;
+};
+
+export type ProjectConflictReason =
+  | "real-file"
+  | "real-dir"
+  | "foreign-symlink"
+  | "broken-unmanaged"
+  | "type-mismatch";
+
+export type ProjectConflict = {
+  targetPath: string;
+  originPath: string;
+  reason: ProjectConflictReason;
+};
+
+export type ProjectLinkAction = "create" | "relink" | "noop";
+
+export type ProjectLinkPlan = {
+  targetPath: string;
+  originPath: string;
+  action: ProjectLinkAction;
+};
+
+export type ProjectPlan = {
+  ensureDirs: string[];
+  links: ProjectLinkPlan[];
+  conflicts: ProjectConflict[];
+};
+
+export type MaterializeKind = "rule" | "skill" | "memory";
+
+export type MaterializeInput = {
+  kind: MaterializeKind;
+  /** Origin-relative destination, e.g. "rules/my-rule.md" or "skills/foo/SKILL.md" */
+  originRelPath: string;
+  /** Full markdown body including frontmatter (caller-owned format for v1). */
+  content: string;
+  /** If true, refuse overwrite when destination exists and content differs. */
+  failIfChanged?: boolean;
+};
+
+export type MaterializeResult =
+  | { status: "created" | "updated" | "unchanged"; absPath: string }
+  | { status: "conflict"; absPath: string; reason: string };
+
+// ---------------------------------------------------------------------------
 // Project registry
 // ---------------------------------------------------------------------------
 

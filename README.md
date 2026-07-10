@@ -174,6 +174,48 @@ boost: 0.05
 
 Consumers typically extend `MemexCoreConfig` with platform-specific fields (hooks config, sync config, sleep schedule, etc.) and handle file loading themselves.
 
+## Shared origin + projection
+
+Harness-neutral primitives for a **shared origin** corpus and **symlink projection** into harness dirs (file-shaped rules/skills; provenance via `readlink`). Design: `design/shared-origin-sync-profile.md`.
+
+```typescript
+import {
+  resolveOriginRoot,
+  planProjection,
+  applyProjection,
+  materializeEntry,
+} from "@jim80net/memex-core";
+
+const { root } = await resolveOriginRoot(); // default ~/.memex (+ XDG / memex-claude fallbacks)
+
+await materializeEntry(root, {
+  kind: "rule",
+  originRelPath: "rules/my-rule.md",
+  content: "---\nname: my-rule\ntype: rule\n---\n…\n",
+});
+
+const plan = await planProjection(root, [
+  {
+    id: "user-rules",
+    targetDir: `${process.env.HOME}/.grok/rules`,
+    originRelDir: "rules",
+    entryKind: "files",
+  },
+]);
+// Partial apply: non-conflicting links applied; real files never clobbered
+const report = await applyProjection(plan);
+```
+
+| API | Role |
+|-----|------|
+| `resolveOriginRoot` | Default `~/.memex`; env `MEMEX_ORIGIN`; fallbacks XDG `memex` then legacy `memex-claude` |
+| `planProjection` / `applyProjection` | Per-entry **absolute** symlinks; fail-closed on real files; partial apply + conflict report |
+| `materializeEntry` | Write rule/skill/memory into origin (per-file lock; no commit) |
+| `commitOriginPaths` | Optional git commit of origin-relative paths (no push) |
+| `migrateOriginToDefault` | Move legacy corpus → `~/.memex` + one-release compat symlink |
+
+Adapters own harness paths and CLI/doctor; core stays path-agnostic except the product-default origin chain.
+
 ## Sync
 
 The `sync` module provides Git-based cross-device sync via `syncPull` and `syncCommitAndPush`. Both accept a `SyncConfig` object.

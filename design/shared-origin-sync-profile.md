@@ -1,6 +1,6 @@
 # Design — Shared origin + sync profile (file-shaped projection)
 
-**Status:** draft for flotilla gate (design only — **no impl until gated**)  
+**Status:** XO-gated + locked residual Qs (2026-07-10); impl in `src/origin.ts`  
 **Authority:** operator product steer `flotilla-dispatch-c29001c1` (2026-07-10)  
 **Brief:** `~/workspace/memex-flotilla/briefs/file-rules-shared-origin-2026-07-10.md`  
 **Hierarchy:** `a1-fleet-ops/state/hierarchy/memex.yaml` → `product_direction`  

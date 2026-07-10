@@ -2,6 +2,32 @@ export * from "./cache.js";
 export * from "./config.js";
 export * from "./embeddings.js";
 export * from "./file-lock.js";
+export type {
+  ApplyProjectionOptions,
+  ApplyProjectionResult,
+  CommitOriginResult,
+  InstallLegacyCompatResult,
+  MigrateOriginResult,
+  OriginRootSource,
+  PlanProjectionOptions,
+  ResolvedOriginRoot,
+  ResolveOriginRootOptions,
+} from "./origin.js";
+export {
+  applyProjection,
+  commitOriginPaths,
+  defaultOriginRoot,
+  expandUserPath,
+  installLegacyOriginCompatSymlink,
+  isPathInsideRoot,
+  legacyClaudeOriginRoot,
+  materializeEntry,
+  migrateOriginToDefault,
+  planProjection,
+  resolveOriginRoot,
+  resolveUnderOrigin,
+  toAbsolutePath,
+} from "./origin.js";
 export * from "./path-encoder.js";
 export type {
   HarnessKind,
