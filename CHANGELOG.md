@@ -11,6 +11,13 @@
   `design/shared-origin-sync-profile.md` (XO-gated). Absolute symlinks v1;
   partial apply + report conflicts; never clobber real harness files.
 
+## [0.6.0](https://github.com/jim80net/memex-core/compare/memex-core-v0.5.0...memex-core-v0.6.0) (2026-07-10)
+
+
+### Features
+
+* **origin:** shared origin root, projection, and materialize primitives ([#35](https://github.com/jim80net/memex-core/issues/35)) ([71af822](https://github.com/jim80net/memex-core/commit/71af8229c875ef0ad4c6fc1c398672ca20486647))
+
 ## [0.5.0](https://github.com/jim80net/memex-core/compare/memex-core-v0.4.0...memex-core-v0.5.0) (2026-07-06)
 
 
