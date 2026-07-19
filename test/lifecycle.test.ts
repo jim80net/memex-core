@@ -19,6 +19,16 @@ describe("entry lifecycle contract", () => {
     );
   });
 
+  it.each([
+    ">-",
+    ">",
+    "|-",
+    "|",
+  ])("bridges legacy RETIRED descriptions encoded with %s", (indicator) => {
+    const markdown = `---\ndescription: ${indicator}\n  RETIRED 2026-06-11 — historical policy\n---\nbody`;
+    expect(parseEntryLifecycle(markdown)).toBe("retired");
+  });
+
   it("defaults unknown or absent lifecycle to active", () => {
     expect(parseEntryLifecycle("# no frontmatter")).toBe("active");
     expect(resolveEntryLifecycle("draft", "ordinary description")).toBe("active");

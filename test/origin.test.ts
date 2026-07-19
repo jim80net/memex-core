@@ -427,6 +427,27 @@ describe("planProjection / applyProjection", () => {
     expect(plan.links).toEqual([]);
     expect(plan.removals).toEqual([]);
   });
+
+  it("does not project a folded legacy RETIRED description", async () => {
+    const retiredOrigin = join(origin, "rules", "alpha.md");
+    const retiredTarget = join(harness, "alpha.md");
+    await writeFile(
+      retiredOrigin,
+      "---\ndescription: >-\n  RETIRED 2026-06-11 — historical rule\n---\nold\n",
+    );
+
+    const plan = await planProjection(origin, [
+      {
+        id: "test-rules",
+        targetDir: harness,
+        originRelDir: "rules",
+        entryKind: "files",
+      },
+    ]);
+
+    expect(plan.links.map((link) => link.targetPath)).not.toContain(retiredTarget);
+    expect(plan.removals).toEqual([]);
+  });
 });
 
 describe("materializeEntry", () => {

@@ -11,7 +11,7 @@ The skill index baseline SHALL use a `ScanDirs` descriptor with `skillDirs`, `me
 
 ### Requirement: parseFrontmatter extracts supported YAML-like metadata and preserves raw bodies when absent
 
-`parseFrontmatter(content)` SHALL parse content wrapped in `---` frontmatter delimiters and return `{ meta, body }`, extracting `name`, `description`, `type`, `queries`, `keywords`, `paths`, `hooks`, `one-liner`, `boost`, and lifecycle `status` (`active | retired`). The returned `body` SHALL contain the content after the closing delimiter. If frontmatter delimiters are absent, the function SHALL return `{ meta: {}, body: content }` without modification.
+`parseFrontmatter(content)` SHALL parse content wrapped in `---` frontmatter delimiters and return `{ meta, body }`, extracting `name`, `description`, `type`, `queries`, `keywords`, `paths`, `hooks`, `one-liner`, `boost`, and lifecycle `status` (`active | retired`). Folded and literal description block scalars (`>-`, `>`, `|-`, and `|`) SHALL be normalized to one search-safe line rather than exposing the scalar indicator. Lifecycle-only frontmatter reads SHALL use the same normalization so legacy descriptions beginning with `RETIRED` produce the same lifecycle in search and projection. The returned `body` SHALL contain the content after the closing delimiter. If frontmatter delimiters are absent, the function SHALL return `{ meta: {}, body: content }` without modification.
 
 #### Scenario: Frontmatter is present
 
@@ -22,6 +22,11 @@ The skill index baseline SHALL use a `ScanDirs` descriptor with `skillDirs`, `me
 
 - **WHEN** content does not match the frontmatter delimiter pattern
 - **THEN** `parseFrontmatter` returns an empty `meta` object and the full raw content as `body`
+
+#### Scenario: Description uses a block scalar
+
+- **WHEN** a description uses a folded or literal YAML block scalar
+- **THEN** `parseFrontmatter` returns its indented content as normalized single-line description text
 
 ### Requirement: parseFrontmatter supports both block-style and inline list values
 

@@ -1,10 +1,7 @@
+import { normalizeFrontmatterScalar, unquoteFrontmatterScalar } from "./frontmatter.js";
 import type { EntryLifecycle } from "./types.js";
 
 const LEGACY_RETIRED_PREFIX = /^retired(?:\s|\b)/i;
-
-function unquote(value: string): string {
-  return value.replace(/^(["'])([\s\S]*)\1$/, "$2").trim();
-}
 
 /**
  * Resolve lifecycle with a compatibility bridge for existing corpus entries
@@ -26,11 +23,19 @@ export function parseEntryLifecycle(content: string): EntryLifecycle {
 
   let lifecycle: string | undefined;
   let description: string | undefined;
-  for (const line of match[1].split(/\r?\n/)) {
+  const lines = match[1].split(/\r?\n/);
+  for (let lineIndex = 0; lineIndex < lines.length; lineIndex += 1) {
+    const line = lines[lineIndex];
     const scalar = line.match(/^([A-Za-z][\w-]*):\s*(.*?)\s*$/);
     if (!scalar) continue;
-    if (scalar[1] === "status") lifecycle = unquote(scalar[2]).toLowerCase();
-    if (scalar[1] === "description") description = unquote(scalar[2]);
+    if (scalar[1] === "status") {
+      lifecycle = unquoteFrontmatterScalar(scalar[2]).trim().toLowerCase();
+    }
+    if (scalar[1] === "description") {
+      const parsed = normalizeFrontmatterScalar(lines, lineIndex, scalar[2]);
+      description = parsed.value;
+      lineIndex = parsed.nextIndex - 1;
+    }
   }
   return resolveEntryLifecycle(lifecycle, description);
 }

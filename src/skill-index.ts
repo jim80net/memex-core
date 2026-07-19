@@ -3,6 +3,7 @@ import { basename, join } from "node:path";
 import { fromCachedSkill, loadCache, saveCache, toCachedSkill } from "./cache.js";
 import type { EmbeddingProvider } from "./embeddings.js";
 import { cosineSimilarity } from "./embeddings.js";
+import { normalizeFrontmatterScalar, unquoteFrontmatterScalar } from "./frontmatter.js";
 import { resolveEntryLifecycle } from "./lifecycle.js";
 import {
   decodePortableLocation,
@@ -42,7 +43,9 @@ export function parseFrontmatter(content: string): { meta: ParsedFrontmatter; bo
   let currentListKey = "";
   const listAccumulators: Record<string, string[]> = {};
 
-  for (const line of frontmatter.split(/\r?\n/)) {
+  const frontmatterLines = frontmatter.split(/\r?\n/);
+  for (let lineIndex = 0; lineIndex < frontmatterLines.length; lineIndex += 1) {
+    const line = frontmatterLines[lineIndex];
     // Continue accumulating list items
     if (currentListKey) {
       const listItem = line.match(/^\s+-\s+(.*)/);
@@ -57,7 +60,14 @@ export function parseFrontmatter(content: string): { meta: ParsedFrontmatter; bo
     if (colonIdx === -1) continue;
     const key = line.slice(0, colonIdx).trim();
     const rawValue = line.slice(colonIdx + 1).trim();
-    const value = rawValue.replace(/^["']|["']$/g, "");
+    const value = unquoteFrontmatterScalar(rawValue);
+
+    if (key === "description") {
+      const parsed = normalizeFrontmatterScalar(frontmatterLines, lineIndex, rawValue);
+      meta.description = parsed.value;
+      lineIndex = parsed.nextIndex - 1;
+      continue;
+    }
 
     // Scalar keys
     if (key === "name") meta.name = value;
