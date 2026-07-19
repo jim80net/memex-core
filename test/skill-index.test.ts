@@ -1,4 +1,4 @@
-import { mkdir, rm, writeFile } from "node:fs/promises";
+import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -54,6 +54,36 @@ Do stuff with weather.`;
     const { meta } = parseFrontmatter(content);
     expect(meta.name).toBe("simple");
     expect(meta.description).toBe("plain description");
+  });
+
+  it.each([
+    ">-",
+    ">",
+    "|-",
+    "|",
+  ])("normalizes %s description block scalars into search-safe text", (indicator) => {
+    const content = `---\nname: multiline\ndescription: ${indicator}\n  First line of the teaser\n  continues on the second line.\n---\nbody`;
+    const { meta } = parseFrontmatter(content);
+
+    expect(meta.description).toBe("First line of the teaser continues on the second line.");
+    expect(meta.description).not.toContain("\n");
+    expect(meta.description).not.toBe(indicator);
+  });
+
+  it.each([
+    "sync-main",
+    "storm",
+  ])("parses the %s folded-description regression fixture", async (fixtureName) => {
+    const content = await readFile(
+      new URL(`./fixtures/folded-frontmatter/${fixtureName}.md`, import.meta.url),
+      "utf8",
+    );
+    const { meta } = parseFrontmatter(content);
+
+    expect(meta.name).toBe(fixtureName);
+    expect(meta.description?.length).toBeGreaterThan(40);
+    expect(meta.description).not.toContain("\n");
+    expect(meta.description).not.toBe(">-");
   });
 
   it("returns empty meta when no frontmatter present", () => {
@@ -422,6 +452,36 @@ describe("SkillIndex", () => {
     const results = await index.search("what is the weather?", 3, 0.5);
     expect(results.length).toBeGreaterThan(0);
     expect(results[0].score).toBeCloseTo(1.0);
+  });
+
+  it("returns normalized sync-main and storm descriptions from search", async () => {
+    const syncMain = await readFile(
+      new URL("./fixtures/folded-frontmatter/sync-main.md", import.meta.url),
+      "utf8",
+    );
+    const storm = await readFile(
+      new URL("./fixtures/folded-frontmatter/storm.md", import.meta.url),
+      "utf8",
+    );
+    await writeFile(join(testDir, "skills", "weather", "SKILL.md"), syncMain);
+    await writeFile(join(testDir, "skills", "git", "SKILL.md"), storm);
+    mockEmbed
+      .mockResolvedValueOnce([
+        [1, 0, 0, 0],
+        [1, 0, 0, 0],
+      ])
+      .mockResolvedValueOnce([[1, 0, 0, 0]]);
+
+    const index = new SkillIndex({ ...DEFAULT_CORE_CONFIG }, mockProvider, cachePath);
+    await index.build(makeScanDirs(testDir));
+    const results = await index.search("development workflow", 5, 0.5);
+
+    for (const name of ["sync-main", "storm"]) {
+      const result = results.find(({ skill }) => skill.name === name);
+      expect(result?.skill.description.length).toBeGreaterThan(40);
+      expect(result?.skill.description).not.toContain("\n");
+      expect(result?.skill.description).not.toBe(">-");
+    }
   });
 
   it("search filters results below threshold", async () => {
