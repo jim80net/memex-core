@@ -148,10 +148,11 @@ hooks:
   - PreToolUse
 one-liner: Short reminder text for repeated matches
 boost: 0.05
+status: active        # active | retired; retired entries stay readable but are inactive by default
 ---
 ```
 
-`queries` and `keywords` are embedded and used for similarity search. `one-liner` is used for graduated disclosure (full content on first match, one-liner on subsequent matches in the same session). `boost` is an optional float added to the raw similarity score before threshold comparison -- use it to nudge skills that are consistently near the threshold boundary.
+`queries` and `keywords` are embedded and used for similarity search. `one-liner` is used for graduated disclosure (full content on first match, one-liner on subsequent matches in the same session). `boost` is an optional float added to the raw similarity score before threshold comparison -- use it to nudge skills that are consistently near the threshold boundary. `status: retired` keeps an entry available for direct historical reads while excluding it from default search and harness projection. Legacy descriptions beginning with `RETIRED` receive the same treatment until corpus migration adds structured status.
 
 ## Configuration
 

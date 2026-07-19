@@ -1,6 +1,7 @@
 import { randomBytes } from "node:crypto";
 import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import { dirname } from "node:path";
+import { resolveEntryLifecycle } from "./lifecycle.js";
 import type { CacheData, CachedSkill, IndexedSkill } from "./types.js";
 
 const CACHE_VERSION = 3 as const;
@@ -49,6 +50,7 @@ export function toCachedSkill(skill: IndexedSkill, mtime: number): CachedSkill {
     type: skill.type,
     oneLiner: skill.oneLiner,
     boost: skill.boost,
+    lifecycle: resolveEntryLifecycle(skill.lifecycle, skill.description),
   };
 }
 
@@ -62,5 +64,6 @@ export function fromCachedSkill(location: string, cached: CachedSkill): IndexedS
     queries: cached.queries,
     oneLiner: cached.oneLiner,
     boost: cached.boost,
+    lifecycle: resolveEntryLifecycle(cached.lifecycle, cached.description),
   };
 }

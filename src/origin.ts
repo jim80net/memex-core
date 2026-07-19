@@ -22,6 +22,7 @@ import { homedir } from "node:os";
 import { dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import { withFileLock } from "./file-lock.js";
 import { git, isGitRepo } from "./git-helpers.js";
+import { parseEntryLifecycle } from "./lifecycle.js";
 import type {
   MaterializeInput,
   MaterializeResult,
@@ -29,6 +30,7 @@ import type {
   ProjectionTarget,
   ProjectLinkPlan,
   ProjectPlan,
+  ProjectRemovalPlan,
 } from "./types.js";
 
 // ---------------------------------------------------------------------------
@@ -342,6 +344,7 @@ export async function planProjection(
   const relinkManaged = opts.relinkManaged !== false;
   const ensureDirs = new Set<string>();
   const links: ProjectLinkPlan[] = [];
+  const removals: ProjectRemovalPlan[] = [];
   const conflicts: ProjectConflict[] = [];
 
   for (const target of targets) {
@@ -367,7 +370,22 @@ export async function planProjection(
         continue;
       }
 
+      const markdownPath =
+        target.entryKind === "skill-dirs" ? join(originPath, "SKILL.md") : originPath;
+      let retired = false;
+      try {
+        retired = parseEntryLifecycle(await readFile(markdownPath, "utf-8")) === "retired";
+      } catch {
+        // The entry was valid when enumerated but changed before lifecycle read.
+      }
+
       const decision = await classifyTarget(targetPath, originPath, root, relinkManaged);
+      if (retired) {
+        if (decision === "noop" || decision === "relink") {
+          removals.push({ targetPath, originPath });
+        }
+        continue;
+      }
       if (decision === "create" || decision === "relink" || decision === "noop") {
         links.push({ targetPath, originPath, action: decision });
       } else {
@@ -379,6 +397,7 @@ export async function planProjection(
   return {
     ensureDirs: [...ensureDirs].sort(),
     links,
+    removals,
     conflicts,
   };
 }
@@ -390,6 +409,7 @@ export type ApplyProjectionOptions = {
 
 export type ApplyProjectionResult = {
   linked: number;
+  removed: number;
   skipped: number;
   conflicts: ProjectConflict[];
 };
@@ -409,7 +429,30 @@ export async function applyProjection(
   }
 
   let linked = 0;
+  let removed = 0;
   let skipped = 0;
+
+  for (const removal of plan.removals ?? []) {
+    try {
+      const st = await lstat(removal.targetPath);
+      if (!st.isSymbolicLink()) {
+        skipped++;
+        continue;
+      }
+      const linkTarget = await readlink(removal.targetPath);
+      const absoluteTarget = isAbsolute(linkTarget)
+        ? resolve(linkTarget)
+        : resolve(dirname(removal.targetPath), linkTarget);
+      if (absoluteTarget !== resolve(removal.originPath)) {
+        skipped++;
+        continue;
+      }
+      await rm(removal.targetPath, { force: true });
+      removed++;
+    } catch {
+      skipped++;
+    }
+  }
 
   for (const link of plan.links) {
     if (link.action === "noop") {
@@ -432,6 +475,7 @@ export async function applyProjection(
 
   return {
     linked,
+    removed,
     skipped,
     conflicts: [...plan.conflicts],
   };

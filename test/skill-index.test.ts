@@ -19,6 +19,13 @@ import { parseFrontmatter, parseMemoryFile, SkillIndex } from "../src/skill-inde
 // ---------------------------------------------------------------------------
 
 describe("parseFrontmatter", () => {
+  it("parses lifecycle status", () => {
+    const { meta } = parseFrontmatter(
+      "---\nname: old-rule\ndescription: retired rule\nstatus: retired\n---\nbody",
+    );
+    expect(meta.status).toBe("retired");
+  });
+
   it("parses name, description, and type from frontmatter", () => {
     const content = `---
 name: weather
@@ -426,6 +433,29 @@ describe("SkillIndex", () => {
     const results = await index.search("weather", 3, 0.65);
     expect(results).toHaveLength(1);
     expect(results[0].score).toBeCloseTo(1.0);
+  });
+
+  it("excludes retired entries by default and allows explicit history search", async () => {
+    const rulesDir = join(testDir, "rules");
+    await mkdir(rulesDir, { recursive: true });
+    await writeFile(
+      join(rulesDir, "old-policy.md"),
+      `---\nname: old-policy\ndescription: RETIRED 2026-06-11 — historical policy\nstatus: retired\n---\nOld policy body.`,
+    );
+
+    mockEmbed.mockResolvedValueOnce(makeEmbeddings(3)).mockResolvedValueOnce([[0, 0, 1, 0]]);
+    const index = new SkillIndex({ ...DEFAULT_CORE_CONFIG }, mockProvider, cachePath);
+    await index.build({
+      skillDirs: [join(testDir, "skills")],
+      memoryDirs: [],
+      ruleDirs: [rulesDir],
+    });
+
+    expect(await index.search("old policy", 5, 0.5)).toEqual([]);
+    expect(index.skillCount).toBe(3);
+    expect(await index.readSkillContent(join(rulesDir, "old-policy.md"))).toContain(
+      "Old policy body.",
+    );
   });
 
   it("search filters by type", async () => {

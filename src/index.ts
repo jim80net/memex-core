@@ -2,6 +2,7 @@ export * from "./cache.js";
 export * from "./config.js";
 export * from "./embeddings.js";
 export * from "./file-lock.js";
+export * from "./lifecycle.js";
 export type {
   ApplyProjectionOptions,
   ApplyProjectionResult,

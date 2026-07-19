@@ -166,4 +166,22 @@ describe("cache", () => {
     const skill = fromCachedSkill("/old/SKILL.md", cached);
     expect(skill.boost).toBeUndefined();
   });
+
+  it("persists lifecycle and upgrades legacy retired descriptions on hydration", () => {
+    const retired: IndexedSkill = {
+      name: "old-policy",
+      description: "historical policy",
+      location: "/old-policy.md",
+      type: "rule",
+      embeddings: [[1, 2, 3]],
+      queries: ["old policy"],
+      lifecycle: "retired",
+    };
+    const cached = toCachedSkill(retired, 1000);
+    expect(cached.lifecycle).toBe("retired");
+    expect(fromCachedSkill(retired.location, cached).lifecycle).toBe("retired");
+
+    const legacy = { ...cached, lifecycle: undefined, description: "RETIRED 2026-06-11 — old" };
+    expect(fromCachedSkill(retired.location, legacy).lifecycle).toBe("retired");
+  });
 });

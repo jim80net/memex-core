@@ -263,6 +263,51 @@ describe("planProjection / applyProjection", () => {
     expect(await readlink(link)).toBe(join(origin, "skills", "weather"));
     expect(await readFile(join(link, "SKILL.md"), "utf-8")).toBe("# weather\n");
   });
+
+  it("adapter contract excludes retired files and removes an existing managed link", async () => {
+    const retiredOrigin = join(origin, "rules", "alpha.md");
+    await writeFile(
+      retiredOrigin,
+      '---\ndescription: "RETIRED 2026-06-11 — historical rule"\nstatus: retired\n---\nold\n',
+    );
+    await mkdir(harness, { recursive: true });
+    const retiredTarget = join(harness, "alpha.md");
+    await symlink(retiredOrigin, retiredTarget);
+
+    const plan = await planProjection(origin, [
+      {
+        id: "test-rules",
+        targetDir: harness,
+        originRelDir: "rules",
+        entryKind: "files",
+      },
+    ]);
+
+    expect(plan.links.map((link) => link.targetPath)).not.toContain(retiredTarget);
+    expect(plan.removals).toEqual([{ targetPath: retiredTarget, originPath: retiredOrigin }]);
+    const result = await applyProjection(plan);
+    expect(result.removed).toBe(1);
+    await expect(lstat(retiredTarget)).rejects.toThrow();
+    expect(await readlink(join(harness, "beta.md"))).toBe(join(origin, "rules", "beta.md"));
+  });
+
+  it("adapter contract excludes retired skill directories from new projection", async () => {
+    await writeFile(
+      join(origin, "skills", "weather", "SKILL.md"),
+      "---\nname: weather\ndescription: old weather\nstatus: retired\n---\nbody\n",
+    );
+    const skillHarness = join(root, "harness-skills");
+    const plan = await planProjection(origin, [
+      {
+        id: "test-skills",
+        targetDir: skillHarness,
+        originRelDir: "skills",
+        entryKind: "skill-dirs",
+      },
+    ]);
+    expect(plan.links).toEqual([]);
+    expect(plan.removals).toEqual([]);
+  });
 });
 
 describe("materializeEntry", () => {

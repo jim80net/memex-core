@@ -25,7 +25,7 @@ The `Logger` type SHALL provide four methods: `info(msg)`, `warn(msg)`, `error(m
 
 ### Requirement: IndexedSkill captures an embedded entry
 
-`IndexedSkill` SHALL contain `name`, `description`, `location` (file path, possibly with `#SectionName`), `type` (SkillType), `embeddings` (array of number arrays), `queries` (search trigger strings), and optional `oneLiner` and `boost`.
+`IndexedSkill` SHALL contain `name`, `description`, `location` (file path, possibly with `#SectionName`), `type` (SkillType), `embeddings` (array of number arrays), `queries` (search trigger strings), and optional `oneLiner`, `boost`, and `lifecycle` (`active | retired`).
 
 #### Scenario: IndexedSkill with memory section reference
 
@@ -43,7 +43,7 @@ The `Logger` type SHALL provide four methods: `info(msg)`, `warn(msg)`, `error(m
 
 ### Requirement: ParsedFrontmatter is a partial record with list keys
 
-`ParsedFrontmatter` SHALL allow `name`, `description`, `queries`, `type`, `paths`, `hooks`, `keywords`, `oneLiner`, and `boost` as known keys, plus an index signature `[key: string]: unknown` for extension. `queries`, `paths`, `hooks`, and `keywords` are string arrays; `boost` is a number.
+`ParsedFrontmatter` SHALL allow `name`, `description`, `queries`, `type`, `paths`, `hooks`, `keywords`, `oneLiner`, `boost`, and `status` as known keys, plus an index signature `[key: string]: unknown` for extension. `queries`, `paths`, `hooks`, and `keywords` are string arrays; `boost` is a number; `status` is `active | retired`.
 
 #### Scenario: Unknown frontmatter key preserved
 

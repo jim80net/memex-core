@@ -22,6 +22,9 @@ export type SkillType =
   | "stop-rule"
   | "rule";
 
+/** Corpus lifecycle. Retired entries remain readable as history but are inactive by default. */
+export type EntryLifecycle = "active" | "retired";
+
 export type IndexedSkill = {
   name: string;
   description: string;
@@ -32,6 +35,8 @@ export type IndexedSkill = {
   queries: string[];
   oneLiner?: string;
   boost?: number;
+  /** Optional for source compatibility; indexed/cache entries always populate it. */
+  lifecycle?: EntryLifecycle;
 };
 
 export type SkillSearchResult = {
@@ -50,6 +55,7 @@ export type ParsedFrontmatter = {
   keywords?: string[];
   oneLiner?: string;
   boost?: number;
+  status?: EntryLifecycle;
   [key: string]: unknown;
 };
 
@@ -71,6 +77,7 @@ export type CachedSkill = {
   type: SkillType;
   oneLiner?: string;
   boost?: number;
+  lifecycle?: EntryLifecycle;
 };
 
 export type CacheData = {
@@ -299,9 +306,17 @@ export type ProjectLinkPlan = {
   action: ProjectLinkAction;
 };
 
+export type ProjectRemovalPlan = {
+  /** Managed harness symlink to remove because its origin entry is retired. */
+  targetPath: string;
+  originPath: string;
+};
+
 export type ProjectPlan = {
   ensureDirs: string[];
   links: ProjectLinkPlan[];
+  /** Optional for compatibility with adapters constructing empty plans. */
+  removals?: ProjectRemovalPlan[];
   conflicts: ProjectConflict[];
 };
 
