@@ -263,6 +263,170 @@ describe("planProjection / applyProjection", () => {
     expect(await readlink(link)).toBe(join(origin, "skills", "weather"));
     expect(await readFile(join(link, "SKILL.md"), "utf-8")).toBe("# weather\n");
   });
+
+  it("adapter contract excludes retired files and removes an existing managed link", async () => {
+    const retiredOrigin = join(origin, "rules", "alpha.md");
+    await writeFile(
+      retiredOrigin,
+      '---\ndescription: "RETIRED 2026-06-11 — historical rule"\nstatus: retired\n---\nold\n',
+    );
+    await mkdir(harness, { recursive: true });
+    const retiredTarget = join(harness, "alpha.md");
+    await symlink(retiredOrigin, retiredTarget);
+
+    const plan = await planProjection(origin, [
+      {
+        id: "test-rules",
+        targetDir: harness,
+        originRelDir: "rules",
+        entryKind: "files",
+      },
+    ]);
+
+    expect(plan.links.map((link) => link.targetPath)).not.toContain(retiredTarget);
+    expect(plan.removals).toEqual([{ targetPath: retiredTarget, originPath: retiredOrigin }]);
+    const result = await applyProjection(plan);
+    expect(result.removed).toBe(1);
+    await expect(lstat(retiredTarget)).rejects.toThrow();
+    expect(await readlink(join(harness, "beta.md"))).toBe(join(origin, "rules", "beta.md"));
+  });
+
+  it("reports and preserves a real file at a retired destination", async () => {
+    const retiredOrigin = join(origin, "rules", "alpha.md");
+    await writeFile(
+      retiredOrigin,
+      "---\ndescription: historical rule\nstatus: retired\n---\nold\n",
+    );
+    await mkdir(harness, { recursive: true });
+    const retiredTarget = join(harness, "alpha.md");
+    await writeFile(retiredTarget, "LOCAL POLICY REMAINS VISIBLE\n");
+
+    const plan = await planProjection(origin, [
+      {
+        id: "test-rules",
+        targetDir: harness,
+        originRelDir: "rules",
+        entryKind: "files",
+      },
+    ]);
+
+    expect(plan.removals).toEqual([]);
+    expect(plan.conflicts).toContainEqual({
+      targetPath: retiredTarget,
+      originPath: retiredOrigin,
+      reason: "real-file",
+    });
+    const result = await applyProjection(plan);
+    expect(result.conflicts).toContainEqual(plan.conflicts[0]);
+    expect(await readFile(retiredTarget, "utf8")).toBe("LOCAL POLICY REMAINS VISIBLE\n");
+  });
+
+  it("reports and preserves a changed managed symlink at a retired destination", async () => {
+    const retiredOrigin = join(origin, "rules", "alpha.md");
+    const changedTarget = join(origin, "rules", "alpha-alias.md");
+    await writeFile(
+      retiredOrigin,
+      "---\ndescription: historical rule\nstatus: retired\n---\nold\n",
+    );
+    await symlink(retiredOrigin, changedTarget);
+    await mkdir(harness, { recursive: true });
+    const retiredTarget = join(harness, "alpha.md");
+    await symlink(changedTarget, retiredTarget);
+
+    const plan = await planProjection(origin, [
+      {
+        id: "test-rules",
+        targetDir: harness,
+        originRelDir: "rules",
+        entryKind: "files",
+      },
+    ]);
+
+    expect(plan.removals).toEqual([]);
+    expect(plan.conflicts).toContainEqual({
+      targetPath: retiredTarget,
+      originPath: retiredOrigin,
+      reason: "changed-managed-symlink",
+    });
+    await applyProjection(plan);
+    expect(await readlink(retiredTarget)).toBe(changedTarget);
+  });
+
+  it("reports and preserves a foreign symlink at a retired destination", async () => {
+    const retiredOrigin = join(origin, "rules", "alpha.md");
+    const outside = join(root, "outside-policy.md");
+    await writeFile(
+      retiredOrigin,
+      "---\ndescription: historical rule\nstatus: retired\n---\nold\n",
+    );
+    await writeFile(outside, "foreign policy\n");
+    await mkdir(harness, { recursive: true });
+    const retiredTarget = join(harness, "alpha.md");
+    await symlink(outside, retiredTarget);
+
+    const plan = await planProjection(origin, [
+      {
+        id: "test-rules",
+        targetDir: harness,
+        originRelDir: "rules",
+        entryKind: "files",
+      },
+    ]);
+
+    expect(plan.removals).toEqual([]);
+    expect(plan.conflicts).toContainEqual({
+      targetPath: retiredTarget,
+      originPath: retiredOrigin,
+      reason: "foreign-symlink",
+    });
+    await applyProjection(plan);
+    expect(await readlink(retiredTarget)).toBe(outside);
+  });
+
+  it("fails closed with a visible conflict when lifecycle metadata cannot be read", async () => {
+    const unreadableSkill = join(origin, "skills", "unreadable");
+    const directoryTarget = join(root, "not-a-markdown-file");
+    await mkdir(unreadableSkill, { recursive: true });
+    await mkdir(directoryTarget, { recursive: true });
+    await symlink(directoryTarget, join(unreadableSkill, "SKILL.md"));
+    const skillHarness = join(root, "harness-skills");
+
+    const plan = await planProjection(origin, [
+      {
+        id: "test-skills",
+        targetDir: skillHarness,
+        originRelDir: "skills",
+        entryKind: "skill-dirs",
+      },
+    ]);
+
+    expect(plan.links.map((link) => link.targetPath)).not.toContain(
+      join(skillHarness, "unreadable"),
+    );
+    expect(plan.conflicts).toContainEqual({
+      targetPath: join(skillHarness, "unreadable"),
+      originPath: unreadableSkill,
+      reason: "lifecycle-read-error",
+    });
+  });
+
+  it("adapter contract excludes retired skill directories from new projection", async () => {
+    await writeFile(
+      join(origin, "skills", "weather", "SKILL.md"),
+      "---\nname: weather\ndescription: old weather\nstatus: retired\n---\nbody\n",
+    );
+    const skillHarness = join(root, "harness-skills");
+    const plan = await planProjection(origin, [
+      {
+        id: "test-skills",
+        targetDir: skillHarness,
+        originRelDir: "skills",
+        entryKind: "skill-dirs",
+      },
+    ]);
+    expect(plan.links).toEqual([]);
+    expect(plan.removals).toEqual([]);
+  });
 });
 
 describe("materializeEntry", () => {

@@ -39,7 +39,7 @@ The cache schema SHALL be `{ version: 3, embeddingModel, skills }`. Skill locati
 
 ### Requirement: Cache conversion strips and restores location around persistence
 
-`toCachedSkill(skill, mtime)` SHALL persist the `IndexedSkill` fields except `location`, because the cache key stores that path separately. `fromCachedSkill(location, cached)` SHALL reconstruct an `IndexedSkill` by restoring the supplied `location` while preserving the cached name, description, queries, embeddings, type, `oneLiner`, and `boost` fields.
+`toCachedSkill(skill, mtime)` SHALL persist the `IndexedSkill` fields except `location`, because the cache key stores that path separately. `fromCachedSkill(location, cached)` SHALL reconstruct an `IndexedSkill` by restoring the supplied `location` while preserving the cached name, description, queries, embeddings, type, `oneLiner`, `boost`, and normalized lifecycle. A legacy cached description beginning with `RETIRED` SHALL hydrate as lifecycle `retired` even when the old record has no lifecycle field.
 
 #### Scenario: Location is omitted from stored CachedSkill values
 

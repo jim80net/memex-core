@@ -3,6 +3,7 @@ import { basename, join } from "node:path";
 import { fromCachedSkill, loadCache, saveCache, toCachedSkill } from "./cache.js";
 import type { EmbeddingProvider } from "./embeddings.js";
 import { cosineSimilarity } from "./embeddings.js";
+import { resolveEntryLifecycle } from "./lifecycle.js";
 import {
   decodePortableLocation,
   encodeFragment,
@@ -15,6 +16,7 @@ import {
 } from "./portable-location.js";
 import type {
   CacheData,
+  EntryLifecycle,
   IndexedSkill,
   MemexCoreConfig,
   ParsedFrontmatter,
@@ -65,6 +67,9 @@ export function parseFrontmatter(content: string): { meta: ParsedFrontmatter; bo
     if (key === "boost") {
       const parsed = Number.parseFloat(value);
       if (!Number.isNaN(parsed)) meta.boost = parsed;
+    }
+    if (key === "status" && (value === "active" || value === "retired")) {
+      meta.status = value;
     }
 
     // List keys — block-style (empty value + indented items) or inline value
@@ -267,6 +272,7 @@ type ToEmbed = {
   body: string;
   oneLiner?: string;
   boost?: number;
+  lifecycle: EntryLifecycle;
 };
 
 export class SkillIndex {
@@ -490,6 +496,7 @@ export class SkillIndex {
           queries: item.queries,
           oneLiner: item.oneLiner,
           boost: item.boost,
+          lifecycle: item.lifecycle,
         };
 
         const existing = this.skills.findIndex((s) => s.location === item.location);
@@ -546,7 +553,9 @@ export class SkillIndex {
     scoringMode: ScoringMode = "absolute",
     maxDropoff: number = 0.15,
   ): Promise<SkillSearchResult[]> {
-    let candidates = this.skills;
+    let candidates = this.skills.filter(
+      (skill) => resolveEntryLifecycle(skill.lifecycle, skill.description) !== "retired",
+    );
     if (typeFilter && typeFilter.length > 0) {
       const allowed = new Set(typeFilter);
       candidates = candidates.filter((s) => allowed.has(s.type));
@@ -637,6 +646,7 @@ export class SkillIndex {
       body,
       oneLiner: meta.oneLiner,
       boost: meta.boost,
+      lifecycle: resolveEntryLifecycle(meta.status, meta.description),
     });
   }
 
@@ -647,6 +657,8 @@ export class SkillIndex {
   ): void {
     const baseStored = this.toStoredLocation(info.location);
     if (!baseStored) return;
+    const { meta } = parseFrontmatter(raw);
+    const lifecycle = resolveEntryLifecycle(meta.status, meta.description);
     const sections = parseMemoryFile(raw, info.location);
     for (const section of sections) {
       const key = `${baseStored}#${encodeFragment(section.name)}`;
@@ -659,6 +671,7 @@ export class SkillIndex {
         type: "memory",
         mtime: info.mtime,
         body: section.body,
+        lifecycle,
       });
     }
   }
@@ -690,6 +703,7 @@ export class SkillIndex {
       body,
       oneLiner,
       boost: meta.boost,
+      lifecycle: resolveEntryLifecycle(meta.status, description),
     });
   }
 }

@@ -11,7 +11,7 @@ The skill index baseline SHALL use a `ScanDirs` descriptor with `skillDirs`, `me
 
 ### Requirement: parseFrontmatter extracts supported YAML-like metadata and preserves raw bodies when absent
 
-`parseFrontmatter(content)` SHALL parse content wrapped in `---` frontmatter delimiters and return `{ meta, body }`, extracting `name`, `description`, `type`, `queries`, `keywords`, `paths`, `hooks`, `one-liner`, and `boost`. The returned `body` SHALL contain the content after the closing delimiter. If frontmatter delimiters are absent, the function SHALL return `{ meta: {}, body: content }` without modification.
+`parseFrontmatter(content)` SHALL parse content wrapped in `---` frontmatter delimiters and return `{ meta, body }`, extracting `name`, `description`, `type`, `queries`, `keywords`, `paths`, `hooks`, `one-liner`, `boost`, and lifecycle `status` (`active | retired`). The returned `body` SHALL contain the content after the closing delimiter. If frontmatter delimiters are absent, the function SHALL return `{ meta: {}, body: content }` without modification.
 
 #### Scenario: Frontmatter is present
 
@@ -104,7 +104,12 @@ During `build()`, each parsed memory section SHALL be indexed as a separate memo
 
 ### Requirement: SkillIndex.search scores all indexed entries, supports filtering, and enforces scoring modes
 
-`SkillIndex.search(query, topK, threshold, typeFilter?, scoringMode?, maxDropoff?)` SHALL embed the incoming query, compute cosine similarity against each indexed query embedding, add any per-entry `boost`, choose the best matching query index per entry, deduplicate results by skill name, and optionally restrict candidates by `typeFilter`. In `relative` mode, the best score SHALL first clear the threshold floor and only results within `maxDropoff` of that best score may remain. In `absolute` mode, each result SHALL individually clear the threshold.
+`SkillIndex.search(query, topK, threshold, typeFilter?, scoringMode?, maxDropoff?)` SHALL exclude lifecycle `retired` entries by default, embed the incoming query, compute cosine similarity against each remaining indexed query embedding, add any per-entry `boost`, choose the best matching query index per entry, deduplicate results by skill name, and optionally restrict candidates by `typeFilter`. In `relative` mode, the best score SHALL first clear the threshold floor and only results within `maxDropoff` of that best score may remain. In `absolute` mode, each result SHALL individually clear the threshold. Direct `readSkillContent(location)` SHALL remain available for explicit historical reads.
+
+#### Scenario: Retired entries are inactive by default
+
+- **WHEN** an indexed entry has `status: retired` or a legacy description beginning with `RETIRED`
+- **THEN** default search excludes it while direct content read remains available
 
 #### Scenario: Duplicate skill names collapse to the highest-scoring entry
 
