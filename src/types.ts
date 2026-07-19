@@ -290,6 +290,8 @@ export type ProjectConflictReason =
   | "real-dir"
   | "foreign-symlink"
   | "broken-unmanaged"
+  | "changed-managed-symlink"
+  | "lifecycle-read-error"
   | "type-mismatch";
 
 export type ProjectConflict = {

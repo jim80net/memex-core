@@ -331,6 +331,20 @@ async function classifyTarget(
   return "type-mismatch";
 }
 
+async function isExactManagedSymlink(targetPath: string, originPath: string): Promise<boolean> {
+  try {
+    const st = await lstat(targetPath);
+    if (!st.isSymbolicLink()) return false;
+    const linkTarget = await readlink(targetPath);
+    const absoluteTarget = isAbsolute(linkTarget)
+      ? resolve(linkTarget)
+      : resolve(dirname(targetPath), linkTarget);
+    return absoluteTarget === resolve(originPath);
+  } catch {
+    return false;
+  }
+}
+
 /**
  * Build a projection plan: which dirs to ensure, which links to create/relink/noop,
  * and which paths conflict (fail-closed — never clobber real files).
@@ -372,17 +386,26 @@ export async function planProjection(
 
       const markdownPath =
         target.entryKind === "skill-dirs" ? join(originPath, "SKILL.md") : originPath;
-      let retired = false;
+      let retired: boolean;
       try {
         retired = parseEntryLifecycle(await readFile(markdownPath, "utf-8")) === "retired";
       } catch {
-        // The entry was valid when enumerated but changed before lifecycle read.
+        conflicts.push({ targetPath, originPath, reason: "lifecycle-read-error" });
+        continue;
       }
 
       const decision = await classifyTarget(targetPath, originPath, root, relinkManaged);
       if (retired) {
-        if (decision === "noop" || decision === "relink") {
-          removals.push({ targetPath, originPath });
+        if (decision === "noop") {
+          if (await isExactManagedSymlink(targetPath, originPath)) {
+            removals.push({ targetPath, originPath });
+          } else {
+            conflicts.push({ targetPath, originPath, reason: "changed-managed-symlink" });
+          }
+        } else if (decision === "relink") {
+          conflicts.push({ targetPath, originPath, reason: "changed-managed-symlink" });
+        } else if (decision !== "create") {
+          conflicts.push({ targetPath, originPath, reason: decision });
         }
         continue;
       }
