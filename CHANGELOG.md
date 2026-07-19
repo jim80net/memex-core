@@ -11,6 +11,14 @@
   `design/shared-origin-sync-profile.md` (XO-gated). Absolute symlinks v1;
   partial apply + report conflicts; never clobber real harness files.
 
+## [0.6.1](https://github.com/jim80net/memex-core/compare/memex-core-v0.6.0...memex-core-v0.6.1) (2026-07-19)
+
+
+### Bug Fixes
+
+* enforce retired lifecycle across search and projection ([#40](https://github.com/jim80net/memex-core/issues/40)) ([d8748d1](https://github.com/jim80net/memex-core/commit/d8748d18dcd86c3f8fa0e6b743ba27d8ab5c05ac))
+* parse YAML block scalar descriptions consistently across search and projection ([#41](https://github.com/jim80net/memex-core/issues/41)) ([c8824c0](https://github.com/jim80net/memex-core/commit/c8824c0e362dbfe58be8d60b415e2118417cee90))
+
 ## [0.6.0](https://github.com/jim80net/memex-core/compare/memex-core-v0.5.0...memex-core-v0.6.0) (2026-07-10)
 
 
