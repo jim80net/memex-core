@@ -3,6 +3,7 @@ import { basename, join } from "node:path";
 import { fromCachedSkill, loadCache, saveCache, toCachedSkill } from "./cache.js";
 import type { EmbeddingProvider } from "./embeddings.js";
 import { cosineSimilarity } from "./embeddings.js";
+import { normalizeFrontmatterScalar, unquoteFrontmatterScalar } from "./frontmatter.js";
 import { resolveEntryLifecycle } from "./lifecycle.js";
 import {
   decodePortableLocation,
@@ -30,34 +31,6 @@ import type {
 // ---------------------------------------------------------------------------
 
 const LIST_KEYS = new Set(["queries", "paths", "hooks", "keywords"]);
-const BLOCK_SCALAR_INDICATOR = /^[>|][+-]?$/;
-
-function parseSearchSafeBlockScalar(
-  lines: string[],
-  startIndex: number,
-): { value: string; nextIndex: number } {
-  const blockLines: string[] = [];
-  let nextIndex = startIndex;
-
-  while (nextIndex < lines.length) {
-    const line = lines[nextIndex];
-    if (line.trim() !== "" && !/^\s/.test(line)) break;
-    blockLines.push(line);
-    nextIndex += 1;
-  }
-
-  const contentIndents = blockLines
-    .filter((line) => line.trim() !== "")
-    .map((line) => line.match(/^\s*/)?.[0].length ?? 0);
-  const indent = contentIndents.length > 0 ? Math.min(...contentIndents) : 0;
-  const value = blockLines
-    .map((line) => line.slice(Math.min(indent, line.length)))
-    .join("\n")
-    .trim()
-    .replace(/\s+/g, " ");
-
-  return { value, nextIndex };
-}
 
 export function parseFrontmatter(content: string): { meta: ParsedFrontmatter; body: string } {
   const match = content.match(/^---\r?\n([\s\S]*?)\r?\n---\r?\n?([\s\S]*)$/);
@@ -87,10 +60,10 @@ export function parseFrontmatter(content: string): { meta: ParsedFrontmatter; bo
     if (colonIdx === -1) continue;
     const key = line.slice(0, colonIdx).trim();
     const rawValue = line.slice(colonIdx + 1).trim();
-    const value = rawValue.replace(/^["']|["']$/g, "");
+    const value = unquoteFrontmatterScalar(rawValue);
 
-    if (key === "description" && BLOCK_SCALAR_INDICATOR.test(rawValue)) {
-      const parsed = parseSearchSafeBlockScalar(frontmatterLines, lineIndex + 1);
+    if (key === "description") {
+      const parsed = normalizeFrontmatterScalar(frontmatterLines, lineIndex, rawValue);
       meta.description = parsed.value;
       lineIndex = parsed.nextIndex - 1;
       continue;
