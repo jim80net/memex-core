@@ -10,6 +10,9 @@
   "type": "module",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
+  "bin": {
+    "memex-core-consistency": "./dist/consistency-cli.js"
+  },
   "exports": {
     ".": {
       "import": "./dist/index.js",
