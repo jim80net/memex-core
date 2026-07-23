@@ -6,6 +6,23 @@ export interface EmbeddingProvider {
   embed(texts: string[]): Promise<number[][]>;
 }
 
+/**
+ * Bundler-owned resolution boundary for standalone artifacts.
+ *
+ * Core always verifies the Sharp version before invoking `loadTransformers`.
+ * Source and ordinary Node consumers should omit this and use Core's default
+ * filesystem-backed resolution.
+ */
+export interface LocalEmbeddingRuntimeResolver {
+  resolveSharpVersion(): string | Promise<string>;
+  loadTransformers(): Promise<unknown>;
+}
+
+type TransformersModule = {
+  pipeline: CallableFunction;
+  env: { cacheDir: string };
+};
+
 const MINIMUM_SAFE_SHARP_VERSION = [0, 35, 0] as const;
 
 function assertSafeSharpVersion(version: unknown): void {
@@ -36,6 +53,24 @@ function assertSafeSharpVersion(version: unknown): void {
     `Local embedding backend refused to load vulnerable sharp ${version}. ` +
       "sharp >=0.35.0 is required to remediate GHSA-f88m-g3jw-g9cj.",
   );
+}
+
+function normalizeTransformersModule(value: unknown): TransformersModule {
+  const candidate = value as Partial<TransformersModule> & {
+    default?: Partial<TransformersModule>;
+  };
+  const normalized = typeof candidate?.pipeline === "function" ? candidate : candidate?.default;
+  if (
+    !normalized ||
+    typeof normalized.pipeline !== "function" ||
+    !normalized.env ||
+    typeof normalized.env !== "object"
+  ) {
+    throw new Error(
+      "Local embedding backend resolver returned an invalid @huggingface/transformers module.",
+    );
+  }
+  return normalized as TransformersModule;
 }
 
 // ---------------------------------------------------------------------------
@@ -91,11 +126,17 @@ export class OpenAIEmbeddingProvider implements EmbeddingProvider {
 export class LocalEmbeddingProvider implements EmbeddingProvider {
   private model: string;
   private cacheDir?: string;
+  private runtimeResolver?: LocalEmbeddingRuntimeResolver;
   private extractorPromise: Promise<unknown> | null = null;
 
-  constructor(model: string = "Xenova/all-MiniLM-L6-v2", cacheDir?: string) {
+  constructor(
+    model: string = "Xenova/all-MiniLM-L6-v2",
+    cacheDir?: string,
+    runtimeResolver?: LocalEmbeddingRuntimeResolver,
+  ) {
     this.model = model;
     this.cacheDir = cacheDir;
+    this.runtimeResolver = runtimeResolver;
   }
 
   async embed(texts: string[]): Promise<number[][]> {
@@ -127,8 +168,31 @@ export class LocalEmbeddingProvider implements EmbeddingProvider {
   }
 
   private async initExtractor(): Promise<unknown> {
-    let transformers: { pipeline: any; env: { cacheDir: string } };
+    let transformers: TransformersModule;
 
+    if (this.runtimeResolver) {
+      let sharpVersion: unknown;
+      try {
+        sharpVersion = await this.runtimeResolver.resolveSharpVersion();
+      } catch {
+        sharpVersion = undefined;
+      }
+      assertSafeSharpVersion(sharpVersion);
+      transformers = normalizeTransformersModule(await this.runtimeResolver.loadTransformers());
+    } else {
+      transformers = await this.loadNodeTransformers();
+    }
+
+    if (this.cacheDir) {
+      transformers.env.cacheDir = this.cacheDir;
+    }
+
+    return transformers.pipeline("feature-extraction", this.model, {
+      dtype: "q8",
+    });
+  }
+
+  private async loadNodeTransformers(): Promise<TransformersModule> {
     const { join, dirname } = await import("node:path");
     const { readFile } = await import("node:fs/promises");
     const { fileURLToPath } = await import("node:url");
@@ -174,23 +238,10 @@ export class LocalEmbeddingProvider implements EmbeddingProvider {
     assertSafeSharpVersion(sharpVersion);
 
     try {
-      transformers = (await import("@huggingface/transformers")) as typeof transformers;
+      return normalizeTransformersModule(await import("@huggingface/transformers"));
     } catch {
-      const resolvedModule = (await import(resolvedPath)) as typeof transformers & {
-        default?: typeof transformers;
-      };
-      transformers = resolvedModule.pipeline
-        ? resolvedModule
-        : (resolvedModule.default ?? resolvedModule);
+      return normalizeTransformersModule(await import(resolvedPath));
     }
-
-    if (this.cacheDir) {
-      transformers.env.cacheDir = this.cacheDir;
-    }
-
-    return transformers.pipeline("feature-extraction", this.model, {
-      dtype: "q8",
-    });
   }
 }
 

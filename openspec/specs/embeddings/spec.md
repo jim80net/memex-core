@@ -11,7 +11,7 @@
 
 ### Requirement: LocalEmbeddingProvider lazily initializes a local ONNX feature-extraction pipeline
 
-`LocalEmbeddingProvider` SHALL default its model name to `"Xenova/all-MiniLM-L6-v2"`, optionally accept a `cacheDir`, and lazily initialize its extractor on the first non-empty `embed()` call by memoizing a single `extractorPromise`. Initialization SHALL resolve `@huggingface/transformers` through this fallback chain: direct `import("@huggingface/transformers")`, then `createRequire(...).resolve("@huggingface/transformers")` followed by dynamic import of the resolved path, then dynamic import of an absolute `../node_modules/@huggingface/transformers/src/transformers.js` path relative to the module directory. If all three resolution paths fail, initialization SHALL throw an install guidance error. When a `cacheDir` is provided, it SHALL be assigned to `transformers.env.cacheDir`. The created pipeline SHALL use task `"feature-extraction"`, the configured model name, and `dtype: "q8"`.
+`LocalEmbeddingProvider` SHALL default its model name to `"Xenova/all-MiniLM-L6-v2"`, optionally accept a `cacheDir`, and lazily initialize its extractor on the first non-empty `embed()` call by memoizing a single `extractorPromise`. Source and ordinary Node consumers SHALL omit the optional `LocalEmbeddingRuntimeResolver`, causing Core to resolve the exact Sharp and Transformers packages from the filesystem. Standalone bundlers MAY supply a resolver that reports their exact bundled Sharp version and lazily loads their bundled Transformers module. Core SHALL verify that reported Sharp version before invoking the loader, fail closed when the version is missing, malformed, prerelease, or below 0.35.0, and reject an invalid Transformers module. When a `cacheDir` is provided, it SHALL be assigned to `transformers.env.cacheDir`. The created pipeline SHALL use task `"feature-extraction"`, the configured model name, and `dtype: "q8"`.
 
 #### Scenario: First embed call initializes the extractor once
 
@@ -22,6 +22,16 @@
 
 - **WHEN** a `LocalEmbeddingProvider` is constructed with a `cacheDir`
 - **THEN** extractor initialization sets `transformers.env.cacheDir` to that directory before creating the pipeline
+
+#### Scenario: Bundled runtime rejects vulnerable Sharp before module load
+
+- **WHEN** a standalone artifact supplies a runtime resolver whose exact Sharp version is below 0.35.0
+- **THEN** initialization fails with the Sharp advisory error without invoking the Transformers loader
+
+#### Scenario: Bundled runtime accepts patched Sharp
+
+- **WHEN** a standalone artifact supplies an exact stable Sharp version at or above 0.35.0 and a valid lazy Transformers loader
+- **THEN** Core invokes the loader only after verification and initializes the feature-extraction pipeline from the returned module
 
 ### Requirement: OpenAIEmbeddingProvider batches requests to the embeddings API
 

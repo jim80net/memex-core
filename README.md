@@ -84,6 +84,21 @@ Two built-in implementations:
 - **`LocalEmbeddingProvider`** -- Runs ONNX models locally via `@huggingface/transformers`. No API key needed. Default model: `Xenova/all-MiniLM-L6-v2`. Lazily initializes the model on first call.
 - **`OpenAIEmbeddingProvider`** -- Calls the OpenAI embeddings API. Requires an API key and model name. Batches in groups of 2048.
 
+Standalone bundlers that cannot use Node's package resolver may provide a lazy,
+bundler-owned runtime resolver as the third `LocalEmbeddingProvider` argument:
+
+```typescript
+const provider = new LocalEmbeddingProvider(model, cacheDir, {
+  resolveSharpVersion: () => BUNDLED_SHARP_VERSION,
+  loadTransformers: () => import("@huggingface/transformers"),
+});
+```
+
+The bundler must derive `BUNDLED_SHARP_VERSION` from the exact Sharp package it
+resolved into the application graph. Core validates that version before calling
+`loadTransformers`; missing, malformed, prerelease, or pre-0.35 versions fail
+closed. Omit the resolver for normal Node/source execution.
+
 ### SkillIndex
 
 The central class. Constructed with `(config, provider, cachePath)`.
