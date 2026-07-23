@@ -541,11 +541,14 @@ export class SkillIndex {
     // Update mtime tracking
     this.skillMtimes = new Map(statResults.map((s) => [s.location, s.mtime]));
 
-    // Persist cache (fire-and-forget)
+    // Settle cache persistence before build resolves so callers can safely
+    // replace or remove the cache root immediately after an awaited build.
     if (this.cache && toEmbed.length > 0) {
-      saveCache(this.cachePath, this.cache).catch(() => {
+      try {
+        await saveCache(this.cachePath, this.cache);
+      } catch {
         // Cache save is best-effort
-      });
+      }
     }
 
     this.buildTime = Date.now();
