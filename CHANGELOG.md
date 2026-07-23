@@ -11,6 +11,14 @@
   `design/shared-origin-sync-profile.md` (XO-gated). Absolute symlinks v1;
   partial apply + report conflicts; never clobber real harness files.
 
+## [0.7.1](https://github.com/jim80net/memex-core/compare/memex-core-v0.7.0...memex-core-v0.7.1) (2026-07-23)
+
+
+### Bug Fixes
+
+* fail closed on vulnerable sharp ([#50](https://github.com/jim80net/memex-core/issues/50)) ([5a34508](https://github.com/jim80net/memex-core/commit/5a345089bb4b0c95310231d6341ca65c5e23f3dd))
+* settle SkillIndex cache writes ([#48](https://github.com/jim80net/memex-core/issues/48)) ([3955e41](https://github.com/jim80net/memex-core/commit/3955e4182729c6b808f9cbf83422405668281575))
+
 ## [0.7.0](https://github.com/jim80net/memex-core/compare/memex-core-v0.6.1...memex-core-v0.7.0) (2026-07-23)
 
 
