@@ -11,6 +11,13 @@
   `design/shared-origin-sync-profile.md` (XO-gated). Absolute symlinks v1;
   partial apply + report conflicts; never clobber real harness files.
 
+## [0.7.0](https://github.com/jim80net/memex-core/compare/memex-core-v0.6.1...memex-core-v0.7.0) (2026-07-23)
+
+
+### Features
+
+* add audit-contracts --json command ([#44](https://github.com/jim80net/memex-core/issues/44)) ([4612869](https://github.com/jim80net/memex-core/commit/4612869ca60b80cafc2e11720b4f7fa7c75d5cbe))
+
 ## [0.6.1](https://github.com/jim80net/memex-core/compare/memex-core-v0.6.0...memex-core-v0.6.1) (2026-07-19)
 
 
