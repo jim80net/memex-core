@@ -1,4 +1,4 @@
-import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdir, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -422,6 +422,40 @@ describe("SkillIndex", () => {
     expect(index.skillCount).toBe(2);
     expect(mockEmbed).toHaveBeenCalledTimes(1);
     expect(mockEmbed.mock.calls[0][0]).toHaveLength(2);
+  });
+
+  it("settles cache writes before repeated isolated teardown", async () => {
+    const stressRoots: string[] = [];
+    try {
+      await Promise.all(
+        Array.from({ length: 40 }, async (_, iteration) => {
+          const root = join(testDir, `stress-${iteration}`);
+          stressRoots.push(root);
+          const skillDir = join(root, "skills", "fixture");
+          await mkdir(skillDir, { recursive: true });
+          await writeFile(
+            join(skillDir, "SKILL.md"),
+            `---\nname: fixture-${iteration}\ndescription: cleanup stress fixture\n---\n`,
+          );
+          const provider: EmbeddingProvider = {
+            embed: async (texts) => texts.map(() => [1, 0, 0, 0]),
+          };
+          const index = new SkillIndex(
+            { ...DEFAULT_CORE_CONFIG },
+            provider,
+            join(root, "cache", "skill-router.json"),
+          );
+
+          await index.build(makeScanDirs(root));
+          await rm(root, { recursive: true, force: true });
+          await expect(stat(root)).rejects.toMatchObject({ code: "ENOENT" });
+        }),
+      );
+    } finally {
+      await Promise.all(
+        stressRoots.map((root) => rm(root, { recursive: true, force: true, maxRetries: 2 })),
+      );
+    }
   });
 
   it("uses frontmatter queries when present", async () => {
