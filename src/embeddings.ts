@@ -6,6 +6,38 @@ export interface EmbeddingProvider {
   embed(texts: string[]): Promise<number[][]>;
 }
 
+const MINIMUM_SAFE_SHARP_VERSION = [0, 35, 0] as const;
+
+function assertSafeSharpVersion(version: unknown): void {
+  if (typeof version !== "string") {
+    throw new Error(
+      "Local embedding backend refused to load @huggingface/transformers because " +
+        "the installed sharp version could not be verified. sharp >=0.35.0 is required " +
+        "to remediate GHSA-f88m-g3jw-g9cj.",
+    );
+  }
+
+  const match = /^(\d+)\.(\d+)\.(\d+)(?:\+.*)?$/.exec(version);
+  const installed = match?.slice(1, 4).map(Number);
+  const isSafe =
+    installed !== undefined &&
+    (installed.every((part, index) => part === MINIMUM_SAFE_SHARP_VERSION[index]) ||
+      installed.some(
+        (part, index) =>
+          part > MINIMUM_SAFE_SHARP_VERSION[index] &&
+          installed
+            .slice(0, index)
+            .every((value, prior) => value === MINIMUM_SAFE_SHARP_VERSION[prior]),
+      ));
+
+  if (isSafe) return;
+
+  throw new Error(
+    `Local embedding backend refused to load vulnerable sharp ${version}. ` +
+      "sharp >=0.35.0 is required to remediate GHSA-f88m-g3jw-g9cj.",
+  );
+}
+
 // ---------------------------------------------------------------------------
 // OpenAI API provider
 // ---------------------------------------------------------------------------
@@ -98,6 +130,7 @@ export class LocalEmbeddingProvider implements EmbeddingProvider {
     let transformers: { pipeline: any; env: { cacheDir: string } };
 
     const { join, dirname } = await import("node:path");
+    const { readFile } = await import("node:fs/promises");
     const { fileURLToPath } = await import("node:url");
     // Dynamic import for createRequire — types may not expose it on the namespace
     const moduleMod = await import("node:module");
@@ -111,32 +144,44 @@ export class LocalEmbeddingProvider implements EmbeddingProvider {
       pluginDir = typeof __dirname !== "undefined" ? __dirname : process.cwd();
     }
 
+    const require = createRequire(join(pluginDir, "package.json"));
+    let resolvedPath: string;
+    try {
+      resolvedPath = require.resolve("@huggingface/transformers");
+    } catch {
+      throw new Error(
+        "Local embedding backend requires @huggingface/transformers. " +
+          "Install it: npm install @huggingface/transformers",
+      );
+    }
+
+    const requireFromTransformers = createRequire(resolvedPath);
+    let sharpVersion: unknown;
+    try {
+      const sharpEntry = requireFromTransformers.resolve("sharp");
+      const sharpManifest = JSON.parse(
+        await readFile(join(dirname(sharpEntry), "..", "package.json"), "utf8"),
+      ) as { name?: unknown; version?: unknown };
+      if (sharpManifest.name !== "sharp") throw new Error("unexpected package manifest");
+      sharpVersion = sharpManifest.version;
+    } catch {
+      throw new Error(
+        "Local embedding backend refused to load @huggingface/transformers because " +
+          "the installed sharp version could not be verified. sharp >=0.35.0 is required " +
+          "to remediate GHSA-f88m-g3jw-g9cj.",
+      );
+    }
+    assertSafeSharpVersion(sharpVersion);
+
     try {
       transformers = (await import("@huggingface/transformers")) as typeof transformers;
     } catch {
-      try {
-        const require = createRequire(join(pluginDir, "package.json"));
-        const resolvedPath = require.resolve("@huggingface/transformers");
-        transformers = (await import(resolvedPath)) as typeof transformers;
-      } catch {
-        try {
-          const absolutePath = join(
-            pluginDir,
-            "..",
-            "node_modules",
-            "@huggingface",
-            "transformers",
-            "src",
-            "transformers.js",
-          );
-          transformers = (await import(absolutePath)) as typeof transformers;
-        } catch {
-          throw new Error(
-            "Local embedding backend requires @huggingface/transformers. " +
-              "Install it: npm install @huggingface/transformers",
-          );
-        }
-      }
+      const resolvedModule = (await import(resolvedPath)) as typeof transformers & {
+        default?: typeof transformers;
+      };
+      transformers = resolvedModule.pipeline
+        ? resolvedModule
+        : (resolvedModule.default ?? resolvedModule);
     }
 
     if (this.cacheDir) {
