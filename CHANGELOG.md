@@ -11,6 +11,13 @@
   `design/shared-origin-sync-profile.md` (XO-gated). Absolute symlinks v1;
   partial apply + report conflicts; never clobber real harness files.
 
+## [0.7.2](https://github.com/jim80net/memex-core/compare/memex-core-v0.7.1...memex-core-v0.7.2) (2026-07-23)
+
+
+### Bug Fixes
+
+* support bundled embedding runtimes ([#51](https://github.com/jim80net/memex-core/issues/51)) ([7d612c2](https://github.com/jim80net/memex-core/commit/7d612c233821a4c3776645e4e32722c9a857d498))
+
 ## [0.7.1](https://github.com/jim80net/memex-core/compare/memex-core-v0.7.0...memex-core-v0.7.1) (2026-07-23)
 
 
