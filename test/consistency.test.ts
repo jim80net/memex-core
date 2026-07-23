@@ -45,6 +45,7 @@ async function fixture(): Promise<{ root: string; manifest: ConsistencyManifest 
     manifest: {
       version: 1,
       expectedCoreVersion: "0.6.1",
+      expectedCoreDeclaration: "^0.6.0",
       adapters: [{ name: "fixture", root: "adapter" }],
       portableLocations: [
         {
@@ -90,6 +91,30 @@ describe("runConsistencyAudit", () => {
     const report = await runConsistencyAudit(manifest, join(root, "manifest.json"));
     expect(report.ok).toBe(false);
     expect(report.checks.filter((check) => !check.ok)).toHaveLength(4);
+  });
+
+  it("fails closed when package and lock declarations drift together", async () => {
+    const { root, manifest } = await fixture();
+    await writeFile(
+      join(root, "adapter", "package.json"),
+      JSON.stringify({ dependencies: { "@jim80net/memex-core": ">=0.0.0" } }),
+    );
+    await writeFile(
+      join(root, "adapter", "pnpm-lock.yaml"),
+      "dependencies:\n  '@jim80net/memex-core':\n    specifier: '>=0.0.0'\n    version: 0.6.1\n",
+    );
+    const report = await runConsistencyAudit(manifest, join(root, "manifest.json"));
+    expect(report.ok).toBe(false);
+    expect(report.checks[0]).toMatchObject({
+      id: "adapter:fixture",
+      ok: false,
+      evidence: {
+        declared: ">=0.0.0",
+        expectedDeclaration: "^0.6.0",
+        expectedVersion: "0.6.1",
+      },
+      error: "declared Core range differs from expected declaration",
+    });
   });
 });
 

@@ -11,6 +11,7 @@ import {
 export type ConsistencyManifest = {
   version: 1;
   expectedCoreVersion: string;
+  expectedCoreDeclaration: string;
   adapters: Array<{ name: string; root: string }>;
   portableLocations: Array<{
     name: string;
@@ -72,7 +73,8 @@ function sha256(content: Buffer): string {
 
 async function adapterCheck(
   adapter: ConsistencyManifest["adapters"][number],
-  expected: string,
+  expectedVersion: string,
+  expectedDeclaration: string,
   base: string,
 ): Promise<ConsistencyCheck> {
   const id = `adapter:${adapter.name}`;
@@ -82,6 +84,14 @@ async function adapterCheck(
     const declared =
       packageJson.dependencies?.[corePackage] ?? packageJson.devDependencies?.[corePackage];
     if (typeof declared !== "string") throw new Error(`missing ${corePackage} declaration`);
+    if (declared !== expectedDeclaration) {
+      return {
+        id,
+        ok: false,
+        evidence: { declared, expectedDeclaration, expectedVersion },
+        error: "declared Core range differs from expected declaration",
+      };
+    }
     const lock = await readFile(join(root, "pnpm-lock.yaml"), "utf8");
     const resolved = lockVersion(lock, declared);
     if (!resolved) throw new Error("lockfile declaration/resolution is missing or inconsistent");
@@ -89,11 +99,11 @@ async function adapterCheck(
       await readFile(join(root, "node_modules", corePackage, "package.json"), "utf8"),
     );
     const installed = installedJson.version;
-    const ok = resolved === expected && installed === expected;
+    const ok = resolved === expectedVersion && installed === expectedVersion;
     return {
       id,
       ok,
-      evidence: { declared, resolved, installed, expected },
+      evidence: { declared, expectedDeclaration, resolved, installed, expectedVersion },
       ...(!ok ? { error: "resolved or installed Core version differs from expected" } : {}),
     };
   } catch (error) {
@@ -196,7 +206,9 @@ export async function runConsistencyAudit(
   }
   const base = dirname(resolve(manifestPath));
   const checks = await Promise.all([
-    ...manifest.adapters.map((item) => adapterCheck(item, manifest.expectedCoreVersion, base)),
+    ...manifest.adapters.map((item) =>
+      adapterCheck(item, manifest.expectedCoreVersion, manifest.expectedCoreDeclaration, base),
+    ),
     ...manifest.portableLocations.map((item) => portableCheck(item, base)),
     ...manifest.projections.map((item) => projectionCheck(item, base)),
     ...manifest.sharedFormats.map((item) => sharedFormatCheck(item, base)),
