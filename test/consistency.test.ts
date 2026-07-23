@@ -2,7 +2,11 @@ import { mkdir, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-import { type ConsistencyManifest, runConsistencyAudit } from "../src/consistency.ts";
+import {
+  type ConsistencyManifest,
+  parseAuditContractArgs,
+  runConsistencyAudit,
+} from "../src/consistency.ts";
 
 const roots: string[] = [];
 
@@ -86,5 +90,27 @@ describe("runConsistencyAudit", () => {
     const report = await runConsistencyAudit(manifest, join(root, "manifest.json"));
     expect(report.ok).toBe(false);
     expect(report.checks.filter((check) => !check.ok)).toHaveLength(4);
+  });
+});
+
+describe("parseAuditContractArgs", () => {
+  it("uses the conventional manifest for audit-contracts --json", () => {
+    expect(parseAuditContractArgs(["--json"], "/repo")).toBe("/repo/audit-contracts.json");
+  });
+
+  it("accepts an explicit manifest in either flag order", () => {
+    expect(parseAuditContractArgs(["--json", "--manifest", "ci/audit.json"], "/repo")).toBe(
+      "/repo/ci/audit.json",
+    );
+    expect(parseAuditContractArgs(["--manifest", "ci/audit.json", "--json"], "/repo")).toBe(
+      "/repo/ci/audit.json",
+    );
+  });
+
+  it("rejects non-JSON and malformed invocations", () => {
+    expect(() => parseAuditContractArgs([], "/repo")).toThrow("audit-contracts --json");
+    expect(() => parseAuditContractArgs(["--json", "--unknown"], "/repo")).toThrow(
+      "audit-contracts --json",
+    );
   });
 });

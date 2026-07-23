@@ -37,6 +37,22 @@ export type ConsistencyReport = {
 
 const corePackage = "@jim80net/memex-core";
 
+export function parseAuditContractArgs(args: string[], cwd = process.cwd()): string {
+  if (!args.includes("--json")) {
+    throw new Error("expected: audit-contracts --json [--manifest <path>]");
+  }
+  const remaining = args.filter((arg) => arg !== "--json");
+  if (
+    !(
+      remaining.length === 0 ||
+      (remaining.length === 2 && remaining[0] === "--manifest" && remaining[1])
+    )
+  ) {
+    throw new Error("expected: audit-contracts --json [--manifest <path>]");
+  }
+  return resolve(cwd, remaining[1] ?? "audit-contracts.json");
+}
+
 function absoluteFrom(base: string, path: string): string {
   return isAbsolute(path) ? path : resolve(base, path);
 }

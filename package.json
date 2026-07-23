@@ -11,7 +11,7 @@
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "bin": {
-    "memex-core-consistency": "./dist/consistency-cli.js"
+    "audit-contracts": "./dist/consistency-cli.js"
   },
   "exports": {
     ".": {
