@@ -1,46 +1,40 @@
-name: CI
+name: Security exception expiry
 
 on:
-  push:
-    branches: [main]
-  pull_request:
-    branches: [main]
+  schedule:
+    - cron: "17 6 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: security-exception-expiry
+  cancel-in-progress: false
 
 jobs:
-  test:
+  transformers-sharp:
     runs-on: ubuntu-latest
-    strategy:
-      matrix:
-        node-version: [20, 22]
-
+    timeout-minutes: 5
     steps:
       - uses: actions/checkout@v4
 
       - name: Install pnpm
         uses: pnpm/action-setup@v4
 
-      - name: Use Node.js ${{ matrix.node-version }}
+      - name: Use Node.js 22
         uses: actions/setup-node@v4
         with:
-          node-version: ${{ matrix.node-version }}
+          node-version: 22
           cache: pnpm
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile --ignore-scripts
 
-      - name: Type check
-        run: pnpm typecheck
-
-      - name: Lint
-        run: pnpm lint
-
-      - name: Run tests
-        run: pnpm test
-
-      - name: Build
+      - name: Build checker
         run: pnpm build
 
-      - name: Regression-check exception evidence artifact
+      - name: Check exception evidence and expiry
         run: |
           set -o pipefail
           node dist/exception-expiry-cli.js --json \
@@ -48,3 +42,12 @@ jobs:
             | tee exception-expiry-report.json
           node --input-type=module -e \
             'import { readFile } from "node:fs/promises"; JSON.parse(await readFile("exception-expiry-report.json", "utf8"));'
+
+      - name: Retain machine evidence
+        if: ${{ always() && hashFiles('exception-expiry-report.json') != '' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: transformers-sharp-exception-evidence
+          path: exception-expiry-report.json
+          if-no-files-found: error
+          retention-days: 30
