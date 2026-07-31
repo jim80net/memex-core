@@ -1,0 +1,49 @@
+name: Security exception expiry
+
+on:
+  schedule:
+    - cron: "17 6 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: security-exception-expiry
+  cancel-in-progress: false
+
+jobs:
+  transformers-sharp:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v4
+
+      - name: Use Node.js 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile --ignore-scripts
+
+      - name: Build checker
+        run: pnpm build
+
+      - name: Check exception evidence and expiry
+        run: |
+          set -o pipefail
+          pnpm check:exception-expiry | tee exception-expiry-report.json
+
+      - name: Retain machine evidence
+        if: ${{ always() && hashFiles('exception-expiry-report.json') != '' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: transformers-sharp-exception-evidence
+          path: exception-expiry-report.json
+          if-no-files-found: error
+          retention-days: 30

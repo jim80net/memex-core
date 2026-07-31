@@ -276,6 +276,22 @@ pnpm build                      # compile to dist/
 
 Note: `pnpm install` without `--ignore-scripts` may fail because `onnxruntime-node` tries to download CUDA binaries in its postinstall. The ONNX runtime loads at runtime, not install time, so this is safe to skip.
 
+### Security exception expiry evidence
+
+The repository-owned Transformers/Sharp exception is checked with a read-only,
+machine-readable command:
+
+```bash
+pnpm build
+check-exception-expiry --json \
+  --manifest .github/security-exceptions/transformers-sharp.json
+```
+
+The command reads current npm manifests and bulk advisory state. It exits nonzero
+when evidence is missing or malformed and after the checked-in disposition expires.
+Renewal requires an independently reviewed manifest change; command-line time or
+disposition overrides are intentionally unsupported.
+
 ## License
 
 MIT

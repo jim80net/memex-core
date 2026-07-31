@@ -1,0 +1,17 @@
+{
+  "schemaVersion": 1,
+  "exceptionId": "transformers-sharp-ghsa-f88m-g3jw-g9cj",
+  "advisoryId": "GHSA-f88m-g3jw-g9cj",
+  "transformersPackage": "@huggingface/transformers",
+  "sharpPackage": "sharp",
+  "knownVulnerableSharpVersion": "0.34.5",
+  "firstPatchedSharpVersion": "0.35.0",
+  "disposition": {
+    "status": "runtime-guard-plus-application-owned-single-sharp-override",
+    "reviewedAt": "2026-07-30",
+    "approvedThrough": "2026-08-06",
+    "expiresAt": "2026-08-07T00:00:00.000Z",
+    "owner": "memex-core#46",
+    "issue": "https://github.com/jim80net/memex-core/issues/46"
+  }
+}
