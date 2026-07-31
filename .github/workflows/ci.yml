@@ -39,3 +39,12 @@ jobs:
 
       - name: Build
         run: pnpm build
+
+      - name: Regression-check exception evidence artifact
+        run: |
+          set -o pipefail
+          node dist/exception-expiry-cli.js --json \
+            --manifest .github/security-exceptions/transformers-sharp.json \
+            | tee exception-expiry-report.json
+          node --input-type=module -e \
+            'import { readFile } from "node:fs/promises"; JSON.parse(await readFile("exception-expiry-report.json", "utf8"));'

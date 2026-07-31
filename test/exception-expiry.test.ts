@@ -110,6 +110,45 @@ describe("runExceptionExpiryCheck", () => {
     });
   });
 
+  it.each([
+    ["missing reviewedAt", (value: ExceptionExpiryManifest) => delete value.disposition.reviewedAt],
+    [
+      "missing approvedThrough",
+      (value: ExceptionExpiryManifest) => delete value.disposition.approvedThrough,
+    ],
+    [
+      "invalid reviewedAt calendar date",
+      (value: ExceptionExpiryManifest) => {
+        value.disposition.reviewedAt = "2026-02-30";
+      },
+    ],
+    [
+      "review after approval",
+      (value: ExceptionExpiryManifest) => {
+        value.disposition.reviewedAt = "2026-08-07";
+      },
+    ],
+    [
+      "expiry inconsistent with approvedThrough",
+      (value: ExceptionExpiryManifest) => {
+        value.disposition.expiresAt = "2026-08-08T00:00:00.000Z";
+      },
+    ],
+  ])("fails closed on %s", async (_name, mutate) => {
+    const malformed = structuredClone(manifest);
+    mutate(malformed);
+    const report = await runExceptionExpiryCheck(malformed, {
+      now: new Date("2026-07-31T12:00:00.000Z"),
+      fetcher: registryFetch(),
+    });
+    expect(report).toMatchObject({ ok: false, status: "indeterminate" });
+    expect(report.checks.find((check) => check.id === "manifest")).toMatchObject({
+      ok: false,
+      evidence: { datesConsistent: false },
+      error: "exception disposition manifest is incomplete or invalid",
+    });
+  });
+
   it("fails closed when registry or advisory evidence is unavailable", async () => {
     const report = await runExceptionExpiryCheck(manifest, {
       now: new Date("2026-07-31T12:00:00.000Z"),

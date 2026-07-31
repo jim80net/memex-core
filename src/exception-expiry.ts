@@ -53,6 +53,25 @@ type Advisory = {
 type Version = [number, number, number];
 
 const registryBase = "https://registry.npmjs.org";
+const dayMilliseconds = 24 * 60 * 60 * 1000;
+
+function parseDateOnly(value: unknown): number | undefined {
+  if (typeof value !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(value)) return undefined;
+  const timestamp = Date.parse(`${value}T00:00:00.000Z`);
+  if (!Number.isFinite(timestamp) || new Date(timestamp).toISOString().slice(0, 10) !== value) {
+    return undefined;
+  }
+  return timestamp;
+}
+
+function parseIsoUtc(value: unknown): number | undefined {
+  if (typeof value !== "string" || !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/.test(value)) {
+    return undefined;
+  }
+  const timestamp = Date.parse(value);
+  if (!Number.isFinite(timestamp) || new Date(timestamp).toISOString() !== value) return undefined;
+  return timestamp;
+}
 
 function parseVersion(value: string): Version | undefined {
   const match = value.match(/^v?(\d+)\.(\d+)\.(\d+)(?:-[0-9A-Za-z.-]+)?$/);
@@ -205,15 +224,29 @@ export async function runExceptionExpiryCheck(
   const now = options.now ?? new Date();
   const fetcher = options.fetcher ?? fetch;
   const checks: ExceptionExpiryCheck[] = [];
-  const expiresAt = new Date(manifest.disposition?.expiresAt);
+  const reviewedAt = parseDateOnly(manifest.disposition?.reviewedAt);
+  const approvedThrough = parseDateOnly(manifest.disposition?.approvedThrough);
+  const expiresAt = parseIsoUtc(manifest.disposition?.expiresAt);
+  const datesConsistent =
+    reviewedAt !== undefined &&
+    approvedThrough !== undefined &&
+    expiresAt !== undefined &&
+    reviewedAt <= approvedThrough &&
+    reviewedAt <= now.getTime() &&
+    approvedThrough + dayMilliseconds === expiresAt;
   const manifestOk =
     manifest.schemaVersion === 1 &&
+    typeof manifest.exceptionId === "string" &&
     manifest.exceptionId.length > 0 &&
+    typeof manifest.advisoryId === "string" &&
     manifest.advisoryId.length > 0 &&
-    manifest.disposition?.status.length > 0 &&
-    manifest.disposition?.owner.length > 0 &&
-    manifest.disposition?.issue.length > 0 &&
-    !Number.isNaN(expiresAt.getTime());
+    typeof manifest.disposition?.status === "string" &&
+    manifest.disposition.status.length > 0 &&
+    typeof manifest.disposition.owner === "string" &&
+    manifest.disposition.owner.length > 0 &&
+    typeof manifest.disposition.issue === "string" &&
+    manifest.disposition.issue.length > 0 &&
+    datesConsistent;
   checks.push({
     id: "manifest",
     ok: manifestOk,
@@ -222,19 +255,24 @@ export async function runExceptionExpiryCheck(
       reviewedAt: manifest.disposition?.reviewedAt,
       approvedThrough: manifest.disposition?.approvedThrough,
       expiresAt: manifest.disposition?.expiresAt,
+      datesConsistent,
       owner: manifest.disposition?.owner,
       issue: manifest.disposition?.issue,
     },
     ...(!manifestOk ? { error: "exception disposition manifest is incomplete or invalid" } : {}),
   });
 
-  const dispositionCurrent = manifestOk && now.getTime() < expiresAt.getTime();
+  const dispositionCurrent = manifestOk && expiresAt !== undefined && now.getTime() < expiresAt;
   checks.push({
     id: "disposition-current",
     ok: dispositionCurrent,
     evidence: { checkedAt: now.toISOString(), expiresAt: manifest.disposition?.expiresAt },
     ...(!dispositionCurrent
-      ? { error: "exception disposition expired without a renewed checked-in disposition" }
+      ? {
+          error: manifestOk
+            ? "exception disposition expired without a renewed checked-in disposition"
+            : "cannot establish current disposition from invalid manifest evidence",
+        }
       : {}),
   });
 
@@ -346,13 +384,15 @@ export async function runExceptionExpiryCheck(
   }
 
   const ok = checks.every((check) => check.ok);
-  const status = !dispositionCurrent
-    ? "expired"
-    : !ok
-      ? "indeterminate"
-      : upstreamExitAvailable
-        ? "exit-available"
-        : "exception-valid";
+  const status = !manifestOk
+    ? "indeterminate"
+    : !dispositionCurrent
+      ? "expired"
+      : !ok
+        ? "indeterminate"
+        : upstreamExitAvailable
+          ? "exit-available"
+          : "exception-valid";
   return {
     schemaVersion: 1,
     ok,
