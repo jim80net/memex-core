@@ -74,18 +74,18 @@ describe("resolveProjectId", () => {
   it("lowercases manual mapping values by default", async () => {
     const config = {
       ...baseConfig,
-      projectMappings: { "/srv/example-user/work": "MyOrg/MyProject" },
+      projectMappings: { "/home/me/work": "MyOrg/MyProject" },
     };
-    expect(await resolveProjectId("/srv/example-user/work", config)).toBe("myorg/myproject");
+    expect(await resolveProjectId("/home/me/work", config)).toBe("myorg/myproject");
   });
 
   it("preserves case in manual mappings when caseSensitive is true", async () => {
     const config = {
       ...baseConfig,
-      projectMappings: { "/srv/example-user/work": "MyOrg/MyProject" },
+      projectMappings: { "/home/me/work": "MyOrg/MyProject" },
       caseSensitive: true,
     };
-    expect(await resolveProjectId("/srv/example-user/work", config)).toBe("MyOrg/MyProject");
+    expect(await resolveProjectId("/home/me/work", config)).toBe("MyOrg/MyProject");
   });
 
   it("lowercases _local encoded path fallback by default", async () => {

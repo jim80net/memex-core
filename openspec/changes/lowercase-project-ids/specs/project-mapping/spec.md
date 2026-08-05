@@ -34,7 +34,7 @@
 
 #### Scenario: Manual mapping lowercased by default
 
-- **WHEN** `resolveProjectId("/srv/example-user/work", { ...config, projectMappings: { "/srv/example-user/work": "MyOrg/MyProject" } })` is called
+- **WHEN** `resolveProjectId("/home/me/work", { ...config, projectMappings: { "/home/me/work": "MyOrg/MyProject" } })` is called
 - **THEN** the result is `"myorg/myproject"`
 
 #### Scenario: Manual mapping case preserved with opt-out

@@ -32,21 +32,21 @@ describe("project registry", () => {
 
   it("saves and loads registry", async () => {
     const reg = await loadRegistry(registryPath);
-    registerProject(reg, "/srv/example-user/project-a");
+    registerProject(reg, "/home/user/project-a");
     await saveRegistry(registryPath, reg);
 
     const loaded = await loadRegistry(registryPath);
-    expect(loaded.projects["/srv/example-user/project-a"]).toBeDefined();
-    expect(loaded.projects["/srv/example-user/project-a"].lastSeen).toBeTruthy();
+    expect(loaded.projects["/home/user/project-a"]).toBeDefined();
+    expect(loaded.projects["/home/user/project-a"].lastSeen).toBeTruthy();
   });
 
   it("updates lastSeen on re-registration", async () => {
     const reg = await loadRegistry(registryPath);
-    registerProject(reg, "/srv/example-user/project-a");
-    const first = reg.projects["/srv/example-user/project-a"].lastSeen;
+    registerProject(reg, "/home/user/project-a");
+    const first = reg.projects["/home/user/project-a"].lastSeen;
 
-    registerProject(reg, "/srv/example-user/project-a");
-    expect(reg.projects["/srv/example-user/project-a"].lastSeen >= first).toBe(true);
+    registerProject(reg, "/home/user/project-a");
+    expect(reg.projects["/home/user/project-a"].lastSeen >= first).toBe(true);
   });
 
   it("getKnownProjects returns paths sorted by most recent", () => {

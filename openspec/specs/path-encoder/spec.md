@@ -6,12 +6,12 @@
 
 #### Scenario: Typical Unix path
 
-- **WHEN** `encodeProjectPath("/srv/example-user/.myproject")` is called
+- **WHEN** `encodeProjectPath("/home/user/.myproject")` is called
 - **THEN** the result is `"-home-user--myproject"`
 
 #### Scenario: Path with underscores
 
-- **WHEN** `encodeProjectPath("/srv/example-user/work/my_project")` is called
+- **WHEN** `encodeProjectPath("/Users/jim/work/my_project")` is called
 - **THEN** the result is `"-Users-jim-work-my-project"`
 
 #### Scenario: Root path
@@ -21,5 +21,5 @@
 
 #### Scenario: Path used in _local fallback
 
-- **WHEN** `resolveProjectId` falls through to the encoded path fallback for `/srv/example-user/work`
+- **WHEN** `resolveProjectId` falls through to the encoded path fallback for `/home/me/work`
 - **THEN** the resulting project ID contains `"_local/-home-me-work"` as the encoded segment

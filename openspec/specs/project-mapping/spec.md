@@ -30,7 +30,7 @@
 
 #### Scenario: Local path is encoded for fallback storage
 
-- **WHEN** `encodeProjectPath("/srv/example-user/.my_project")` is called
+- **WHEN** `encodeProjectPath("/home/user/.my_project")` is called
 - **THEN** it returns `"-home-user--my-project"`
 
 ### Requirement: Git remote lookup returns origin or null
@@ -53,12 +53,12 @@
 
 #### Scenario: Manual mapping lowercases by default
 
-- **WHEN** `resolveProjectId("/srv/example-user/work", { ...syncConfig, projectMappings: { "/srv/example-user/work": "MyOrg/MyProject" } })` is called with `caseSensitive` unset or false
+- **WHEN** `resolveProjectId("/home/me/work", { ...syncConfig, projectMappings: { "/home/me/work": "MyOrg/MyProject" } })` is called with `caseSensitive` unset or false
 - **THEN** it returns `"myorg/myproject"`
 
 #### Scenario: Manual mapping preserves case in case-sensitive mode
 
-- **WHEN** `resolveProjectId("/srv/example-user/work", { ...syncConfig, caseSensitive: true, projectMappings: { "/srv/example-user/work": "MyOrg/MyProject" } })` is called
+- **WHEN** `resolveProjectId("/home/me/work", { ...syncConfig, caseSensitive: true, projectMappings: { "/home/me/work": "MyOrg/MyProject" } })` is called
 - **THEN** it returns `"MyOrg/MyProject"`
 
 #### Scenario: Git remote is used when no manual mapping exists
