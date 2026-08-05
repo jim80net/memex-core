@@ -1,6 +1,6 @@
 /**
  * Encode an absolute path to a project directory name.
- * `/home/user/.myproject` → `-home-user--myproject`
+ * `/srv/example-user/.myproject` → `-srv-example-user--myproject`
  *
  * Rules:
  * - `/` becomes `-`

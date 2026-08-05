@@ -18,26 +18,26 @@ import {
 import { LOCATION_ROUND_TRIP_GOLDEN } from "./fixtures/location-round-trip-golden.ts";
 
 const FIXTURE_CTX: ScanRootContext = {
-  cwd: "/home/user/project",
+  cwd: "/srv/example-user/project",
   syncEnabled: true,
-  syncRepoDir: "/home/user/.memex/sync",
-  globalSkillsDirs: ["/home/user/.grok/skills", "/home/user/.claude/skills"],
-  globalRulesDirs: ["/home/user/.grok/rules"],
-  projectSkillsDir: "/home/user/project/.grok/skills",
-  projectRulesDir: "/home/user/project/.grok/rules",
+  syncRepoDir: "/srv/example-user/.memex/sync",
+  globalSkillsDirs: ["/srv/example-user/.grok/skills", "/srv/example-user/.claude/skills"],
+  globalRulesDirs: ["/srv/example-user/.grok/rules"],
+  projectSkillsDir: "/srv/example-user/project/.grok/skills",
+  projectRulesDir: "/srv/example-user/project/.grok/rules",
   harness: "grok",
 };
 
 function fixtureRegistry() {
   return buildScanRoots(FIXTURE_CTX, {
     skillDirs: [
-      "/home/user/.grok/skills",
-      "/home/user/project/.grok/skills",
-      "/home/user/.memex/sync/skills",
+      "/srv/example-user/.grok/skills",
+      "/srv/example-user/project/.grok/skills",
+      "/srv/example-user/.memex/sync/skills",
       "/opt/extra/skills",
     ],
-    memoryDirs: ["/home/user/project/.grok/memories"],
-    ruleDirs: ["/home/user/.grok/rules", "/home/user/.memex/sync/rules"],
+    memoryDirs: ["/srv/example-user/project/.grok/memories"],
+    ruleDirs: ["/srv/example-user/.grok/rules", "/srv/example-user/.memex/sync/rules"],
   });
 }
 
@@ -125,9 +125,9 @@ describe("portable-location", () => {
 
   it("round-trips section names containing hash or percent", () => {
     const registry = fixtureRegistry();
-    const file = "/home/user/project/.grok/memories/note.md";
+    const file = "/srv/example-user/project/.grok/memories/note.md";
     const base = encodePortableLocation(registry, file);
-    expect(base).toBe("memex://memory-unclassified-f87226b1/note.md");
+    expect(base).toBe("memex://memory-unclassified-411d39e1/note.md");
 
     for (const sectionName of ["Part#Two", "A%23B"] as const) {
       const handle = `${base}#${encodeFragment(sectionName)}`;
@@ -140,8 +140,8 @@ describe("portable-location", () => {
   it("round-trips absolute paths with literal hash in directory names", () => {
     const registry = fixtureRegistry();
     for (const absolute of [
-      "/home/user/.grok/skills/c#/SKILL.md",
-      "/home/user/.grok/skills/c#sharp/SKILL.md",
+      "/srv/example-user/.grok/skills/c#/SKILL.md",
+      "/srv/example-user/.grok/skills/c#sharp/SKILL.md",
     ]) {
       const handle = encodePortableLocation(registry, absolute);
       expect(handle).toContain("%23");
@@ -154,7 +154,7 @@ describe("portable-location", () => {
   it("resolvePortableLocation accepts absolute paths with deprecation warn", () => {
     const registry = fixtureRegistry();
     const warn = vi.fn();
-    const abs = "/home/user/.grok/skills/weather/SKILL.md";
+    const abs = "/srv/example-user/.grok/skills/weather/SKILL.md";
     expect(resolvePortableLocation(registry, abs, { warn })).toBe(abs);
     expect(warn).toHaveBeenCalledWith(expect.stringContaining("deprecated"));
   });
@@ -187,12 +187,12 @@ describe("portable-location", () => {
     const registry = buildScanRoots(
       {
         ...FIXTURE_CTX,
-        globalSkillsDirs: [grokfoo, "/home/user/.grok/skills"],
+        globalSkillsDirs: [grokfoo, "/srv/example-user/.grok/skills"],
       },
-      { skillDirs: [grokfoo, "/home/user/.grok/skills"], memoryDirs: [], ruleDirs: [] },
+      { skillDirs: [grokfoo, "/srv/example-user/.grok/skills"], memoryDirs: [], ruleDirs: [] },
     );
     const grokfooHandle = encodePortableLocation(registry, join(grokfoo, "x/SKILL.md"));
-    const realGrok = encodePortableLocation(registry, "/home/user/.grok/skills/y/SKILL.md");
+    const realGrok = encodePortableLocation(registry, "/srv/example-user/.grok/skills/y/SKILL.md");
     expect(grokfooHandle).toMatch(/^memex:\/\/skill-unclassified-/);
     expect(realGrok).toBe("memex://grok-global/y/SKILL.md");
   });
