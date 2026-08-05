@@ -224,7 +224,7 @@ export { migrateProjectIdsToLowercase, runSyncMigrations } from "./sync-migratio
 
 ## Trade-offs and open constraints
 
-- **Linux case-distinct `_local/` paths collapse under the default**: `/home/Jim/work` and `/home/jim/work` both encode to `-home-jim-work` under `caseSensitive: false`. Users who legitimately have case-distinct cwd paths on a case-sensitive filesystem must set `caseSensitive: true`. Documented, not fixed.
+- **Linux case-distinct `_local/` paths collapse under the default**: `/srv/Example-User/Work` and `/srv/example-user/work` both encode to `-srv-example-user-work` under `caseSensitive: false`. Users who legitimately have case-distinct cwd paths on a case-sensitive filesystem must set `caseSensitive: true`. Documented, not fixed.
 - **Manual `projectMappings` values get lowercased at runtime under the default**: the user's stored mapping stays intact as typed in their config file, but the resolved ID is lowercased. The `caseSensitive: true` opt-out preserves case in the resolved ID.
 - **Consumers must call `syncPull` before `syncCommitAndPush`** for migration to happen on the upgrade sync. This is already the established pattern; documented more explicitly.
 - **Offline upgrade is deferred**: a user who upgrades and runs sync while offline will fall through the "fetch failed" early return. Migration will not run until they are back online and can pull successfully. This is intentional — migrating locally without fetch would create exactly the divergent-history race the CRITICAL finding called out.

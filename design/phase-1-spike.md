@@ -6,7 +6,7 @@
 
 - Codex CLI **0.142.5**, model **gpt-5.5**, `originator: codex_exec`
 - Hooks: user-level `~/.codex/hooks.json` (absolute paths into this worktree) + `--dangerously-bypass-hook-trust` for automation
-- Project trust: `[projects."/home/jim/.../codex-memex-dev"] trust_level = "trusted"` added to `~/.codex/config.toml`
+- Project trust: `[projects."$HOME/.../codex-memex-dev"] trust_level = "trusted"` added to `~/.codex/config.toml`
 - **Note:** project-only `.codex/hooks.json` did **not** fire without user-level hooks in `codex exec` (even with project trust + bypass). Interactive `/hooks` trust not exercised this pass.
 
 Captures: `~/.codex/spike-captures/phase-1/` (archived prior pipe-smoke under `phase-1-prior/`)
@@ -28,22 +28,22 @@ Live captures from session `019f25aa-985b-7510-99a7-157901d23b14` (tool-using tu
 
 **SessionStart:**
 ```json
-{"session_id":"019f25aa-985b-7510-99a7-157901d23b14","transcript_path":"/home/jim/.codex/sessions/2026/07/03/rollout-2026-07-03T01-49-24-019f25aa-985b-7510-99a7-157901d23b14.jsonl","cwd":"/home/jim/workspace/github.com/jim80net/codex-memex-dev","hook_event_name":"SessionStart","model":"gpt-5.5","permission_mode":"bypassPermissions","source":"startup"}
+{"session_id":"019f25aa-985b-7510-99a7-157901d23b14","transcript_path":"$HOME/.codex/sessions/2026/07/03/rollout-2026-07-03T01-49-24-019f25aa-985b-7510-99a7-157901d23b14.jsonl","cwd":"$HOME/workspace/github.com/jim80net/codex-memex-dev","hook_event_name":"SessionStart","model":"gpt-5.5","permission_mode":"bypassPermissions","source":"startup"}
 ```
 
 **UserPromptSubmit:**
 ```json
-{"session_id":"019f25aa-985b-7510-99a7-157901d23b14","turn_id":"019f25aa-9906-7a70-91e5-8bcf6898981e","transcript_path":"/home/jim/.codex/sessions/2026/07/03/rollout-2026-07-03T01-49-24-019f25aa-985b-7510-99a7-157901d23b14.jsonl","cwd":"/home/jim/workspace/github.com/jim80net/codex-memex-dev","hook_event_name":"UserPromptSubmit","model":"gpt-5.5","permission_mode":"bypassPermissions","prompt":"what marker did memex inject? Reply with only the marker string."}
+{"session_id":"019f25aa-985b-7510-99a7-157901d23b14","turn_id":"019f25aa-9906-7a70-91e5-8bcf6898981e","transcript_path":"$HOME/.codex/sessions/2026/07/03/rollout-2026-07-03T01-49-24-019f25aa-985b-7510-99a7-157901d23b14.jsonl","cwd":"$HOME/workspace/github.com/jim80net/codex-memex-dev","hook_event_name":"UserPromptSubmit","model":"gpt-5.5","permission_mode":"bypassPermissions","prompt":"what marker did memex inject? Reply with only the marker string."}
 ```
 
 **PreToolUse:**
 ```json
-{"session_id":"019f25aa-985b-7510-99a7-157901d23b14","turn_id":"019f25aa-9906-7a70-91e5-8bcf6898981e","transcript_path":"/home/jim/.codex/sessions/2026/07/03/rollout-2026-07-03T01-49-24-019f25aa-985b-7510-99a7-157901d23b14.jsonl","cwd":"/home/jim/workspace/github.com/jim80net/codex-memex-dev","hook_event_name":"PreToolUse","model":"gpt-5.5","permission_mode":"bypassPermissions","tool_name":"Bash","tool_input":{"command":"rg -n \"memex|marker|inject\" ."},"tool_use_id":"call_ChEoDShVTstHoIJphP7hbpSu"}
+{"session_id":"019f25aa-985b-7510-99a7-157901d23b14","turn_id":"019f25aa-9906-7a70-91e5-8bcf6898981e","transcript_path":"$HOME/.codex/sessions/2026/07/03/rollout-2026-07-03T01-49-24-019f25aa-985b-7510-99a7-157901d23b14.jsonl","cwd":"$HOME/workspace/github.com/jim80net/codex-memex-dev","hook_event_name":"PreToolUse","model":"gpt-5.5","permission_mode":"bypassPermissions","tool_name":"Bash","tool_input":{"command":"rg -n \"memex|marker|inject\" ."},"tool_use_id":"call_ChEoDShVTstHoIJphP7hbpSu"}
 ```
 
 **Stop (success turn):**
 ```json
-{"session_id":"019f25aa-985b-7510-99a7-157901d23b14","turn_id":"019f25aa-9906-7a70-91e5-8bcf6898981e","transcript_path":"/home/jim/.codex/sessions/2026/07/03/rollout-2026-07-03T01-49-24-019f25aa-985b-7510-99a7-157901d23b14.jsonl","cwd":"/home/jim/workspace/github.com/jim80net/codex-memex-dev","hook_event_name":"Stop","model":"gpt-5.5","permission_mode":"bypassPermissions","stop_hook_active":false,"last_assistant_message":"memex-spike: injection marker 7f3a"}
+{"session_id":"019f25aa-985b-7510-99a7-157901d23b14","turn_id":"019f25aa-9906-7a70-91e5-8bcf6898981e","transcript_path":"$HOME/.codex/sessions/2026/07/03/rollout-2026-07-03T01-49-24-019f25aa-985b-7510-99a7-157901d23b14.jsonl","cwd":"$HOME/workspace/github.com/jim80net/codex-memex-dev","hook_event_name":"Stop","model":"gpt-5.5","permission_mode":"bypassPermissions","stop_hook_active":false,"last_assistant_message":"memex-spike: injection marker 7f3a"}
 ```
 
 ## Phase 1b — injection proof
@@ -87,7 +87,7 @@ Every Codex hook event has its own `*HookSpecificOutputWire` with the same nesti
 
 **Stop capture (passing turn):**
 ```json
-{"session_id":"019f25b4-c0fe-7712-8c5a-1c54674556a3","turn_id":"019f25b4-c180-7453-978f-225eee29e340","transcript_path":"/home/jim/.codex/sessions/2026/07/03/rollout-2026-07-03T02-00-30-019f25b4-c0fe-7712-8c5a-1c54674556a3.jsonl","cwd":"/home/jim/workspace/github.com/jim80net/codex-memex-dev","hook_event_name":"Stop","model":"gpt-5.5","permission_mode":"bypassPermissions","stop_hook_active":false,"last_assistant_message":"memex-spike: injection marker 7f3a"}
+{"session_id":"019f25b4-c0fe-7712-8c5a-1c54674556a3","turn_id":"019f25b4-c180-7453-978f-225eee29e340","transcript_path":"$HOME/.codex/sessions/2026/07/03/rollout-2026-07-03T02-00-30-019f25b4-c0fe-7712-8c5a-1c54674556a3.jsonl","cwd":"$HOME/workspace/github.com/jim80net/codex-memex-dev","hook_event_name":"Stop","model":"gpt-5.5","permission_mode":"bypassPermissions","stop_hook_active":false,"last_assistant_message":"memex-spike: injection marker 7f3a"}
 ```
 
 **Verdict:** Phase 1b **PASS** with wrapped wire. Hook-based context injection on Codex 0.142.5 is **confirmed** — semantics Claude-isomorphic (`additionalContext` string inside event-specific `hookSpecificOutput`).

@@ -23,8 +23,8 @@ describe("encodeProjectPath", () => {
   });
 
   it("encodes a path with underscores matching Claude Code behavior", () => {
-    expect(encodeProjectPath("/home/jim/workspace/github.com/jim80net/a_book")).toBe(
-      "-home-jim-workspace-github-com-jim80net-a-book",
+    expect(encodeProjectPath("/srv/example-user/workspace/github.com/jim80net/a_book")).toBe(
+      "-srv-example-user-workspace-github-com-jim80net-a-book",
     );
   });
 });

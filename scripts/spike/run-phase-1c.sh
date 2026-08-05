@@ -4,7 +4,7 @@ set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 CAPTURE_ROOT="${CODEX_HOME:-${HOME}/.codex}/spike-captures/phase-1c"
-MEMEX_CODEX="${MEMEX_CODEX_ROOT:-/home/jim/workspace/github.com/jim80net/memex-codex}"
+MEMEX_CODEX="${MEMEX_CODEX_ROOT:-$HOME/workspace/github.com/jim80net/memex-codex}"
 
 mkdir -p "${CAPTURE_ROOT}"
 

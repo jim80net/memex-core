@@ -49,7 +49,7 @@ Phase 5 skill consumers should use the same lock when dequeuing or mutating the 
     {
       "session_id": "019f…",
       "cwd": "/path/to/worktree",
-      "transcript_path": "/home/jim/.codex/sessions/…/rollout-….jsonl",
+      "transcript_path": "$HOME/.codex/sessions/…/rollout-….jsonl",
       "captured_at": "2026-07-03T06:00:00.000Z",
       "user_message_count": 12
     }
