@@ -323,15 +323,14 @@ describe("planProjection / applyProjection", () => {
 
   it("reports and preserves a changed managed symlink at a retired destination", async () => {
     const retiredOrigin = join(origin, "rules", "alpha.md");
-    const changedTarget = join(origin, "rules", "alpha-alias.md");
+    const otherOrigin = join(origin, "rules", "beta.md");
     await writeFile(
       retiredOrigin,
       "---\ndescription: historical rule\nstatus: retired\n---\nold\n",
     );
-    await symlink(retiredOrigin, changedTarget);
     await mkdir(harness, { recursive: true });
     const retiredTarget = join(harness, "alpha.md");
-    await symlink(changedTarget, retiredTarget);
+    await symlink(otherOrigin, retiredTarget);
 
     const plan = await planProjection(origin, [
       {
@@ -349,7 +348,103 @@ describe("planProjection / applyProjection", () => {
       reason: "changed-managed-symlink",
     });
     await applyProjection(plan);
-    expect(await readlink(retiredTarget)).toBe(changedTarget);
+    expect(await readlink(retiredTarget)).toBe(otherOrigin);
+  });
+
+  it("removes a retired managed link when origin root is a symlink and link text is the real dir", async () => {
+    const originReal = join(root, "origin-real");
+    const originLink = join(root, "origin-link");
+    const harnessDir = join(root, "harness-via-real");
+    await mkdir(join(originReal, "rules"), { recursive: true });
+    await writeFile(
+      join(originReal, "rules", "retired.md"),
+      '---\ndescription: "RETIRED 2026-06-11 — historical rule"\n---\nold\n',
+    );
+    await symlink(originReal, originLink);
+    await mkdir(harnessDir, { recursive: true });
+    const originEntryViaReal = join(originReal, "rules", "retired.md");
+    const originEntryViaLink = join(originLink, "rules", "retired.md");
+    const target = join(harnessDir, "retired.md");
+    await symlink(originEntryViaReal, target);
+
+    const plan = await planProjection(originLink, [
+      {
+        id: "test-rules",
+        targetDir: harnessDir,
+        originRelDir: "rules",
+        entryKind: "files",
+      },
+    ]);
+
+    expect(plan.removals).toHaveLength(1);
+    expect(plan.conflicts).toHaveLength(0);
+    expect(plan.removals).toEqual([{ targetPath: target, originPath: originEntryViaLink }]);
+    const result = await applyProjection(plan);
+    expect(result.removed).toBe(1);
+    await expect(lstat(target)).rejects.toThrow();
+  });
+
+  it("no-ops when origin root is a symlink, link text is the real dir, and the entry is not retired", async () => {
+    const originReal = join(root, "origin-real");
+    const originLink = join(root, "origin-link");
+    const harnessDir = join(root, "harness-via-real");
+    await mkdir(join(originReal, "rules"), { recursive: true });
+    await writeFile(join(originReal, "rules", "active.md"), "# active\n");
+    await symlink(originReal, originLink);
+    await mkdir(harnessDir, { recursive: true });
+    const originEntryViaReal = join(originReal, "rules", "active.md");
+    const originEntryViaLink = join(originLink, "rules", "active.md");
+    const target = join(harnessDir, "active.md");
+    await symlink(originEntryViaReal, target);
+
+    const plan = await planProjection(originLink, [
+      {
+        id: "test-rules",
+        targetDir: harnessDir,
+        originRelDir: "rules",
+        entryKind: "files",
+      },
+    ]);
+
+    expect(plan.conflicts).toEqual([]);
+    expect(plan.removals).toEqual([]);
+    expect(plan.links).toContainEqual({
+      targetPath: target,
+      originPath: originEntryViaLink,
+      action: "noop",
+    });
+  });
+
+  it("still conflicts when the target is a real file under a symlink origin root", async () => {
+    const originReal = join(root, "origin-real");
+    const originLink = join(root, "origin-link");
+    const harnessDir = join(root, "harness-via-real");
+    await mkdir(join(originReal, "rules"), { recursive: true });
+    await writeFile(
+      join(originReal, "rules", "retired.md"),
+      '---\ndescription: "RETIRED 2026-06-11 — historical rule"\n---\nold\n',
+    );
+    await symlink(originReal, originLink);
+    await mkdir(harnessDir, { recursive: true });
+    const originEntryViaLink = join(originLink, "rules", "retired.md");
+    const target = join(harnessDir, "retired.md");
+    await writeFile(target, "LOCAL POLICY REMAINS VISIBLE\n");
+
+    const plan = await planProjection(originLink, [
+      {
+        id: "test-rules",
+        targetDir: harnessDir,
+        originRelDir: "rules",
+        entryKind: "files",
+      },
+    ]);
+
+    expect(plan.removals).toEqual([]);
+    expect(plan.conflicts).toContainEqual({
+      targetPath: target,
+      originPath: originEntryViaLink,
+      reason: "real-file",
+    });
   });
 
   it("reports and preserves a foreign symlink at a retired destination", async () => {

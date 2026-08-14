@@ -16,12 +16,22 @@
 
 ### Requirement: planProjection never plans clobber of real harness files
 
-`planProjection(originRoot, targets, opts?)` SHALL enumerate origin entries per target (`files` by suffix, default `*.md`; `skill-dirs` as child directories containing `SKILL.md`), classify each destination with `lstat`, and emit `create` / `relink` / `noop` link actions or a conflict reason. Entries with `status: retired`, or legacy descriptions beginning with `RETIRED` in scalar, folded, or literal form, SHALL not receive link actions. If an inactive entry already has an exact managed symlink, the plan SHALL include a removal. A changed managed symlink at a retired destination SHALL remain untouched and become a `changed-managed-symlink` conflict. Real files and real directories SHALL become conflicts (`real-file` / `real-dir`). Symlinks pointing outside the origin root SHALL become `foreign-symlink` (or `broken-unmanaged` when broken and unmanaged). Symlinks under the origin root MAY be planned as `relink` when `relinkManaged` is true (default). If lifecycle metadata cannot be read after enumeration, projection SHALL fail closed for that entry with a `lifecycle-read-error` conflict.
+`planProjection(originRoot, targets, opts?)` SHALL enumerate origin entries per target (`files` by suffix, default `*.md`; `skill-dirs` as child directories containing `SKILL.md`), classify each destination with `lstat`, and emit `create` / `relink` / `noop` link actions or a conflict reason. Entries with `status: retired`, or legacy descriptions beginning with `RETIRED` in scalar, folded, or literal form, SHALL not receive link actions. If an inactive entry already has an exact managed symlink, the plan SHALL include a removal. Exact managed means the harness link text equals the origin entry path, or `realpath` of both paths is equal (the same equality `classifyTarget` uses for `noop`). A changed managed symlink at a retired destination SHALL remain untouched and become a `changed-managed-symlink` conflict. Real files and real directories SHALL become conflicts (`real-file` / `real-dir`). Symlinks pointing outside the origin root SHALL become `foreign-symlink` (or `broken-unmanaged` when broken and unmanaged). Symlinks under the origin root MAY be planned as `relink` when `relinkManaged` is true (default). If lifecycle metadata cannot be read after enumeration, projection SHALL fail closed for that entry with a `lifecycle-read-error` conflict.
 
 #### Scenario: Retired managed projection is removed
 
 - **WHEN** an origin entry is retired and its harness path is a symlink to that exact origin entry
 - **THEN** the plan contains no link action for it and records a managed removal
+
+#### Scenario: Retired realpath-equal managed projection is removed
+
+- **WHEN** the origin root is a symlink, the harness link text is the real origin directory, and the origin entry description begins with `RETIRED`
+- **THEN** the plan records one managed removal and no conflict for that path
+
+#### Scenario: Realpath-equal active symlink is noop
+
+- **WHEN** the origin root is a symlink, the harness link text is the real origin directory, and the origin entry is not retired
+- **THEN** the plan records action `"noop"` for that path and does not record a conflict
 
 #### Scenario: Real file at target is a conflict
 
@@ -35,7 +45,7 @@
 
 ### Requirement: applyProjection uses absolute symlinks and partial apply
 
-`applyProjection(plan)` SHALL create directories listed in `plan.ensureDirs`, remove only planned symlinks that still point to the exact retired origin entry, apply every non-`noop` link in `plan.links` as an **absolute** symlink from target → origin path, leave conflicted paths untouched, and return `{ linked, removed, skipped, conflicts }` where `conflicts` mirrors `plan.conflicts`. It MUST NOT delete or overwrite non-symlink files or changed/foreign symlinks.
+`applyProjection(plan)` SHALL create directories listed in `plan.ensureDirs`, remove only planned symlinks that still match the exact retired origin entry (link-text or `realpath` equality), apply every non-`noop` link in `plan.links` as an **absolute** symlink from target → origin path, leave conflicted paths untouched, and return `{ linked, removed, skipped, conflicts }` where `conflicts` mirrors `plan.conflicts`. It MUST NOT delete or overwrite non-symlink files or changed/foreign symlinks.
 
 #### Scenario: Partial success when one entry conflicts
 
