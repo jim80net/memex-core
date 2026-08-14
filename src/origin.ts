@@ -339,7 +339,13 @@ async function isExactManagedSymlink(targetPath: string, originPath: string): Pr
     const absoluteTarget = isAbsolute(linkTarget)
       ? resolve(linkTarget)
       : resolve(dirname(targetPath), linkTarget);
-    return absoluteTarget === resolve(originPath);
+    if (absoluteTarget === resolve(originPath)) return true;
+    try {
+      const [a, b] = await Promise.all([realpath(targetPath), realpath(originPath)]);
+      return a === b;
+    } catch {
+      return false;
+    }
   } catch {
     return false;
   }
@@ -457,16 +463,7 @@ export async function applyProjection(
 
   for (const removal of plan.removals ?? []) {
     try {
-      const st = await lstat(removal.targetPath);
-      if (!st.isSymbolicLink()) {
-        skipped++;
-        continue;
-      }
-      const linkTarget = await readlink(removal.targetPath);
-      const absoluteTarget = isAbsolute(linkTarget)
-        ? resolve(linkTarget)
-        : resolve(dirname(removal.targetPath), linkTarget);
-      if (absoluteTarget !== resolve(removal.originPath)) {
+      if (!(await isExactManagedSymlink(removal.targetPath, removal.originPath))) {
         skipped++;
         continue;
       }
