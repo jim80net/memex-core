@@ -11,6 +11,13 @@
   `design/shared-origin-sync-profile.md` (XO-gated). Absolute symlinks v1;
   partial apply + report conflicts; never clobber real harness files.
 
+## [0.7.4](https://github.com/jim80net/memex-core/compare/memex-core-v0.7.3...memex-core-v0.7.4) (2026-08-15)
+
+
+### Bug Fixes
+
+* **origin:** treat realpath-equal managed symlinks as exact ([8018e1e](https://github.com/jim80net/memex-core/commit/8018e1e7291f47e5e88bf6e416ed127ec5ef81ec))
+
 ## [0.7.3](https://github.com/jim80net/memex-core/compare/memex-core-v0.7.2...memex-core-v0.7.3) (2026-07-31)
 
 
